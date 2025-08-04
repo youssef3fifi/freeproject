@@ -1,159 +1,156 @@
-#new_windo.py
 import tkinter as tk
-from tkinter import ttk, messagebox
-from models.product_model import get_all_products, update_product_quantity
-from models.invoice_model import create_invoice_with_items  
+from tkinter import ttk
+import ttkbootstrap as ttkb
+from datetime import datetime
+from models.product_model import ProductModel
+from models.invoice_model import InvoiceModel
+from ui.product_ui import ProductUI
+from ui.invoice_ui import InvoiceUI
 
 
-def open_dashboard(user):
-    dashboard = tk.Toplevel()
-    dashboard.title("Dashboard")
-    dashboard.geometry("700x650")
+def open_dashboard(root, db_config, current_user):
+    # Close current window
+    root.destroy()
 
-    label = tk.Label(dashboard, text=f"Welcome {user['username']} - Role: {user['role']}", font=("Arial", 14))
-    label.pack(pady=10)
+    # Create a new window
+    new_root = ttkb.Window(themename="superhero")
+    new_root.title("Point of Sale System - Dashboard")
+    new_root.geometry("1200x700")
+    new_root.minsize(width=800, height=600)
 
-    columns = ("id", "name", "quantity", "price", "total_price", "sold", "profit")
-    tree = ttk.Treeview(dashboard, columns=columns, show="headings", selectmode="extended")
-    for col in columns:
-        tree.heading(col, text=col)
-    tree.pack(fill="both", expand=True)
+    # Create tabs
+    tab_control = ttk.Notebook(new_root)
 
-    def load_products():
-        tree.delete(*tree.get_children())
-        for product in get_all_products():
-            total_price = product["quantity"] * product["price"]
-            profit = product["sold"] * product["price"]
-            tree.insert("", "end", values=(
-                product["id"], product["name"], product["quantity"], product["price"],
-                total_price, product["sold"], profit
-            ))
+    # Dashboard tab
+    dashboard_tab = ttk.Frame(tab_control)
+    tab_control.add(dashboard_tab, text="Dashboard")
 
-    # ===== بيع أكثر من منتج =====
-    invoice_items = []
+    # Products tab
+    products_tab = ttk.Frame(tab_control)
+    tab_control.add(products_tab, text="Products")
 
-    def add_to_invoice():
-        selected = tree.selection()
-        if not selected:
-            messagebox.showwarning("Warning", "Please select a product")
-            return
-        try:
-            quantity = int(quantity_entry.get())
-            if quantity <= 0:
-                raise ValueError()
-        except:
-            messagebox.showerror("Error", "Enter valid quantity")
-            return
+    # Invoices tab
+    invoices_tab = ttk.Frame(tab_control)
+    tab_control.add(invoices_tab, text="Invoices")
 
-        for item in selected:
-            values = tree.item(item)["values"]
-            product_id, name, available_qty, price = values[0], values[1], values[2], values[3]
-            if quantity > available_qty:
-                messagebox.showwarning("Warning", f"Not enough quantity for {name}")
-                continue
-            invoice_items.append({"product_id": int(product_id),
-                                  "name": name,
-                                  "quantity": int(quantity),
-                                  "price": float(price)
-})
-        refresh_invoice_preview()
+    tab_control.pack(expand=1, fill="both")
 
-    def refresh_invoice_preview():
-        invoice_preview.delete(0, tk.END)
-        for item in invoice_items:
-            invoice_preview.insert(tk.END, f"{item['name']} x {item['quantity']} @ {item['price']}")
+    # Initialize models
+    product_model = ProductModel(db_config)
+    invoice_model = InvoiceModel(db_config)
 
-    def remove_selected_item(event):
-        selected = invoice_preview.curselection()
-        if selected:
-            index = selected[0]
-            del invoice_items[index]
-            refresh_invoice_preview()
+    # Create simple dashboard
+    create_simple_dashboard(dashboard_tab, product_model, invoice_model, current_user)
 
-    def finalize_invoice():
-        try:
-            discount = float(discount_entry.get()) if discount_entry.get() else 0.0
-        except:
-            messagebox.showerror("Error", "Invalid discount value")
-            return
+    # Initialize UI modules for other tabs
+    product_ui = ProductUI(products_tab, product_model)
+    invoice_ui = InvoiceUI(invoices_tab, product_model, invoice_model)
 
-        if not invoice_items:
-            messagebox.showwarning("Warning", "No items added to invoice")
-            return
+    # Set focus to dashboard tab
+    tab_control.select(0)
 
-        try:
-            invoice_id = create_invoice_with_items(invoice_items, discount)
-            for item in invoice_items:
-                update_product_quantity(item["product_id"], item["quantity"])
-            messagebox.showinfo("Success", f"Invoice #{invoice_id} completed successfully")
-            invoice_items.clear()
-            refresh_invoice_preview()
-            load_products()
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to complete invoice.\n{str(e)}")
+    # Run the window
+    new_root.mainloop()
 
-    # إدخال الكمية وزر الإضافة
-    quantity_entry = tk.Entry(dashboard)
-    quantity_entry.pack(pady=5)
-    quantity_entry.insert(0, "1")
 
-    add_button = tk.Button(dashboard, text="Add to Invoice", command=add_to_invoice)
-    add_button.pack(pady=5)
+def create_simple_dashboard(parent, product_model, invoice_model, current_user):
+    # Create main frame
+    frame = ttk.Frame(parent, padding=20)
+    frame.pack(fill=tk.BOTH, expand=True)
 
-    # معاينة محتوى الفاتورة
-    invoice_preview = tk.Listbox(dashboard, height=6)
-    invoice_preview.pack(pady=5, fill="x")
-    invoice_preview.bind("<Double-Button-1>", remove_selected_item)
+    # Header
+    header_frame = ttk.Frame(frame)
+    header_frame.pack(fill=tk.X, pady=(0, 20))
 
-    # إدخال الخصم وزر إنهاء الفاتورة
-    discount_entry = tk.Entry(dashboard)
-    discount_entry.pack(pady=5)
-    discount_entry.insert(0, "0")
+    ttk.Label(header_frame, text="Dashboard", font=("TkDefaultFont", 16, "bold")).pack(side=tk.LEFT)
 
-    finalize_button = tk.Button(dashboard, text="Finalize Invoice", command=finalize_invoice)
-    finalize_button.pack(pady=5)
+    # User info and date
+    user_frame = ttk.Frame(header_frame)
+    user_frame.pack(side=tk.RIGHT)
 
-    load_products()
+    now = datetime.now()
+    date_str = now.strftime("%Y-%m-%d %H:%M")
 
-    # ===== Add New Product (Admin only) =====
-    if user["role"] == "admin":
-        separator = ttk.Separator(dashboard, orient='horizontal')
-        separator.pack(fill='x', pady=10)
+    ttk.Label(user_frame, text=f"Welcome, {current_user}").pack(anchor=tk.E)
+    ttk.Label(user_frame, text=f"Date: {date_str}").pack(anchor=tk.E)
 
-        add_label = tk.Label(dashboard, text="Add New Product", font=("Arial", 12, "bold"))
-        add_label.pack(pady=5)
+    # Create stats cards
+    stats_frame = ttk.Frame(frame)
+    stats_frame.pack(fill=tk.X, pady=(0, 20))
 
-        name_entry = tk.Entry(dashboard)
-        name_entry.pack()
-        name_entry.insert(0, "Product Name")
+    # Configure grid
+    stats_frame.columnconfigure(0, weight=1)
+    stats_frame.columnconfigure(1, weight=1)
+    stats_frame.columnconfigure(2, weight=1)
 
-        quantity_entry_add = tk.Entry(dashboard)
-        quantity_entry_add.pack()
-        quantity_entry_add.insert(0, "Quantity")
+    # Load data for stats
+    try:
+        # Get product stats
+        success, message, products = product_model.get_all_products()
+        if success:
+            total_products = len(products)
+            low_stock = sum(1 for p in products if p["quantity"] <= 5)
+        else:
+            total_products = 0
+            low_stock = 0
 
-        price_entry = tk.Entry(dashboard)
-        price_entry.pack()
-        price_entry.insert(0, "Price")
+        # Get sales stats
+        success, message, invoice_data = invoice_model.get_all_invoices()
+        if success:
+            invoices = invoice_data.get('invoices', [])
+            total_sales = sum(invoice["total"] for invoice in invoices)
+        else:
+            total_sales = 0
 
-        def add_product_handler():
-            name = name_entry.get()
-            try:
-                quantity = int(quantity_entry_add.get())
-                price = float(price_entry.get())
-            except:
-                messagebox.showerror("Error", "Please enter valid quantity and price")
-                return
+    except Exception as e:
+        total_products = 0
+        low_stock = 0
+        total_sales = 0
+        print(f"Error loading dashboard data: {str(e)}")
 
-            if not name:
-                messagebox.showerror("Error", "Enter product name")
-                return
+    # Create stat cards
+    create_stat_card(stats_frame, 0, "Total Products", str(total_products), "info")
+    create_stat_card(stats_frame, 1, "Low Stock Items", str(low_stock), "warning")
+    create_stat_card(stats_frame, 2, "Total Sales", f"${total_sales:.2f}", "success")
 
-            from models.product_model import add_product
-            add_product(name, quantity, price)
-            messagebox.showinfo("Success", "Product added successfully")
-            load_products()
+    # Add some additional content
+    content_frame = ttk.Frame(frame)
+    content_frame.pack(fill=tk.BOTH, expand=True, pady=10)
 
-        add_button = tk.Button(dashboard, text="Add Product", command=add_product_handler)
-        add_button.pack(pady=5)
+    ttk.Label(
+        content_frame,
+        text="Welcome to the Point of Sale System",
+        font=("TkDefaultFont", 14, "bold")
+    ).pack(pady=20)
 
-    dashboard.mainloop()
+    ttk.Label(
+        content_frame,
+        text="Use the tabs above to manage products and create invoices.",
+        wraplength=600
+    ).pack()
+
+    ttk.Label(
+        content_frame,
+        text="The invoice system has been updated to provide better stock validation.",
+        wraplength=600
+    ).pack(pady=10)
+
+    ttk.Separator(content_frame).pack(fill=tk.X, pady=20)
+
+    ttk.Label(
+        content_frame,
+        text="© 2025 POS System by youssef3fifi",
+        font=("TkDefaultFont", 8)
+    ).pack(side=tk.BOTTOM, pady=10)
+
+
+def create_stat_card(parent, column, title, value, color):
+    card = ttk.Frame(parent, style=f"{color}.TFrame", padding=10)
+    card.grid(row=0, column=column, sticky="nsew", padx=5)
+
+    ttk.Label(card, text=title).pack(anchor=tk.W)
+    ttk.Label(
+        card,
+        text=value,
+        font=("TkDefaultFont", 20, "bold")
+    ).pack(anchor=tk.W)
