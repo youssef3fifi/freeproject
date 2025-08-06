@@ -63,8 +63,7 @@ class Login:
         # تخصيص العنوان
         style.configure('Title.TLabel', font=('Arial', 16, 'bold'), background='#f0f0f0')
         
-        # تخصيص زر إعادة التعيين
-        style.configure('Reset.TButton', background='#f0f0f0', foreground='#666', font=('Arial', 8))
+
     
     def setup_login_ui(self):
         # إنشاء إطار رئيسي
@@ -100,14 +99,7 @@ class Login:
         login_button.bind('<Enter>', on_enter)
         login_button.bind('<Leave>', on_leave)
         
-        # زر إعادة تعيين كلمات المرور
-        reset_button = ttk.Button(
-            main_frame, 
-            text="إعادة تعيين المستخدمين", 
-            command=self.reset_passwords,
-            style='Reset.TButton'
-        )
-        reset_button.pack(pady=5)
+
         
         # تسجيل حدث الضغط على Enter للقيام بتسجيل الدخول
         self.root.bind('<Return>', lambda event: self.login())
@@ -150,17 +142,7 @@ class Login:
         else:
             messagebox.showerror("خطأ في تسجيل الدخول", result)
     
-    def reset_passwords(self):
-        if messagebox.askyesno("تأكيد", "هل أنت متأكد من إعادة تعيين المستخدمين الافتراضيين؟"):
-            success, message = UserModel.reset_default_users()
-            if success:
-                messagebox.showinfo("تم بنجاح", 
-                                  message + "\n\n"
-                                  "بيانات الدخول الافتراضية:\n"
-                                  "المدير: اسم المستخدم: admin، كلمة المرور: admin\n"
-                                  "الموظف: اسم المستخدم: user، كلمة المرور: user")
-            else:
-                messagebox.showerror("خطأ", message)
+
     
     def on_dashboard_close(self, dashboard_window):
         dashboard_window.destroy()

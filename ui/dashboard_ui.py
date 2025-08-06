@@ -111,6 +111,151 @@ class Dashboard:
         # تطبيق ستايل موحد لكل النوافذ
         self.apply_style()
     
+    def generate_invoice_text(self, invoice_id, customer_name, customer_phone, barcode, invoice_date, cart_items, subtotal, discount, total):
+        """إنشاء نص الفاتورة بتنسيق موحد"""
+        invoice_text = f"""        ████████ محل البركة ████████
+        العنوان: شارع النصر – القاهرة
+        الهاتف: 0100-123-4567
++----------------------------------------+
+| الاسم: {customer_name:<30} |
+| رقم الهاتف: {customer_phone:<26} |
+| رقم الفاتورة: {invoice_id:<24} |
+| الباركود: {barcode:<28} |
+| التاريخ: {invoice_date:<29} |
++----------------------------------------+
+| الصنف              | الكمية | السعر  | الإجمالي |
++----------------------------------------+
+"""
+        # إضافة المنتجات
+        for item in cart_items:
+            # تنسيق النص مع مراعاة العرض المناسب
+            product_line = f"| {item['name']:<18} | {item['quantity']:^6} | {item['price']:>6.2f} | {item['total']:>8.2f} |\n"
+            invoice_text += product_line
+        
+        # إكمال الفاتورة مع تنسيق أفضل
+        invoice_text += f"""+----------------------------------------+
+| الإجمالي قبل الخصم:           {subtotal:>10.2f} |
+| الخصم:                       {discount:>10.2f} |
+| الإجمالي بعد الخصم:          {total:>10.2f} |
++----------------------------------------+
+         شكراً لتعاملكم معنا!
+      للاتصال: 0100-123-4567
+"""
+        return invoice_text
+    
+    def save_invoice_as_image(self, invoice_text, invoice_id):
+        """حفظ الفاتورة كصورة باستخدام tkinter canvas"""
+        # إنشاء نافذة مؤقتة لرسم الفاتورة
+        temp_window = tk.Toplevel(self.root)
+        temp_window.withdraw()  # إخفاء النافذة
+        
+        # إنشاء canvas لرسم الفاتورة
+        canvas_width = 600
+        canvas_height = 800
+        canvas = tk.Canvas(temp_window, width=canvas_width, height=canvas_height, bg='white')
+        canvas.pack()
+        
+        # رسم النص على canvas
+        lines = invoice_text.split('\n')
+        y_position = 20
+        line_height = 18
+        
+        try:
+            # استخدام خط مناسب
+            font = ("Courier", 10)
+            
+            for line in lines:
+                if line.strip():  # تجاهل الأسطر الفارغة
+                    canvas.create_text(10, y_position, text=line, anchor='nw', font=font, fill='black')
+                y_position += line_height
+            
+            # تحديث canvas
+            temp_window.update()
+            
+            # حفظ كملف PostScript ثم تحويله
+            ps_file = f"invoice_{invoice_id}.ps"
+            canvas.postscript(file=ps_file)
+            
+            # في حالة عدم وجود مكتبات تحويل الصورة، سيتم حفظ الفاتورة كـ PostScript
+            return ps_file
+            
+        except Exception as e:
+            return None
+        finally:
+            temp_window.destroy()
+            
+    def create_invoice_canvas_widget(self, parent, invoice_id, customer_name, customer_phone, barcode, invoice_date, cart_items, subtotal, discount, total):
+        """إنشاء واجهة الفاتورة الموحدة"""
+        # الشعار والترويسة
+        header_frame = ttk.Frame(parent)
+        header_frame.pack(fill="x", padx=10, pady=5)
+        
+        ttk.Label(header_frame, text="محل البركة", font=("Arial", 18, "bold")).pack(pady=5)
+        ttk.Label(header_frame, text="العنوان: شارع النصر – القاهرة", font=("Arial", 10)).pack()
+        ttk.Label(header_frame, text="الهاتف: 0100-123-4567", font=("Arial", 10)).pack(pady=2)
+        
+        ttk.Separator(parent).pack(fill="x", padx=10, pady=5)
+        
+        # معلومات الفاتورة
+        info_frame = ttk.Frame(parent)
+        info_frame.pack(fill="x", padx=10, pady=5)
+        
+        # استخدام شبكة للمعلومات
+        ttk.Label(info_frame, text="الاسم:", font=("Arial", 10, "bold")).grid(row=0, column=0, sticky="e", padx=5, pady=2)
+        ttk.Label(info_frame, text=customer_name).grid(row=0, column=1, sticky="w", padx=5, pady=2)
+        
+        ttk.Label(info_frame, text="رقم الهاتف:", font=("Arial", 10, "bold")).grid(row=1, column=0, sticky="e", padx=5, pady=2)
+        ttk.Label(info_frame, text=customer_phone).grid(row=1, column=1, sticky="w", padx=5, pady=2)
+        
+        ttk.Label(info_frame, text="رقم الفاتورة:", font=("Arial", 10, "bold")).grid(row=0, column=2, sticky="e", padx=5, pady=2)
+        ttk.Label(info_frame, text=str(invoice_id)).grid(row=0, column=3, sticky="w", padx=5, pady=2)
+        
+        ttk.Label(info_frame, text="التاريخ:", font=("Arial", 10, "bold")).grid(row=1, column=2, sticky="e", padx=5, pady=2)
+        ttk.Label(info_frame, text=invoice_date).grid(row=1, column=3, sticky="w", padx=5, pady=2)
+        
+        ttk.Label(info_frame, text="الباركود:", font=("Arial", 10, "bold")).grid(row=2, column=0, sticky="e", padx=5, pady=2)
+        ttk.Label(info_frame, text=barcode).grid(row=2, column=1, sticky="w", padx=5, pady=2)
+        
+        ttk.Separator(parent).pack(fill="x", padx=10, pady=5)
+        
+        # جدول المنتجات
+        items_frame = ttk.Frame(parent)
+        items_frame.pack(fill="x", padx=10, pady=5)
+        
+        # عناوين الجدول
+        ttk.Label(items_frame, text="الصنف", font=("Arial", 10, "bold")).grid(row=0, column=0, padx=5, pady=2, sticky="w")
+        ttk.Label(items_frame, text="الكمية", font=("Arial", 10, "bold")).grid(row=0, column=1, padx=5, pady=2)
+        ttk.Label(items_frame, text="السعر", font=("Arial", 10, "bold")).grid(row=0, column=2, padx=5, pady=2)
+        ttk.Label(items_frame, text="الإجمالي", font=("Arial", 10, "bold")).grid(row=0, column=3, padx=5, pady=2)
+        
+        ttk.Separator(items_frame, orient="horizontal").grid(row=1, columnspan=4, sticky="ew", padx=5, pady=2)
+        
+        # إضافة المنتجات للجدول
+        for i, item in enumerate(cart_items):
+            ttk.Label(items_frame, text=item['name']).grid(row=i+2, column=0, padx=5, pady=2, sticky="w")
+            ttk.Label(items_frame, text=str(item['quantity'])).grid(row=i+2, column=1, padx=5, pady=2)
+            ttk.Label(items_frame, text=f"{item['price']:.2f}").grid(row=i+2, column=2, padx=5, pady=2)
+            ttk.Label(items_frame, text=f"{item['total']:.2f}").grid(row=i+2, column=3, padx=5, pady=2)
+        
+        ttk.Separator(parent).pack(fill="x", padx=10, pady=5)
+        
+        # الإجماليات
+        totals_frame = ttk.Frame(parent)
+        totals_frame.pack(fill="x", padx=10, pady=5)
+        
+        ttk.Label(totals_frame, text=f"الإجمالي قبل الخصم: {subtotal:.2f} جنيه", font=("Arial", 11, "bold")).pack(anchor="e")
+        ttk.Label(totals_frame, text=f"الخصم: {discount:.2f} جنيه", font=("Arial", 11, "bold")).pack(anchor="e")
+        ttk.Label(totals_frame, text=f"الإجمالي بعد الخصم: {total:.2f} جنيه", font=("Arial", 12, "bold"), foreground="red").pack(anchor="e")
+        
+        ttk.Separator(parent).pack(fill="x", padx=10, pady=5)
+        
+        # الخاتمة
+        footer_frame = ttk.Frame(parent)
+        footer_frame.pack(fill="x", padx=10, pady=5)
+        
+        ttk.Label(footer_frame, text="شكراً لتعاملكم معنا!", font=("Arial", 12, "bold")).pack(pady=2)
+        ttk.Label(footer_frame, text="للاتصال: 0100-123-4567", font=("Arial", 10)).pack()
+    
     def apply_style(self):
         # تطبيق نمط وستايل على التطبيق
         style = ttk.Style()
@@ -718,27 +863,14 @@ class Dashboard:
             barcode = "#" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
             invoice_date = datetime.now().strftime("%Y-%m-%d")
             
-            # إنشاء نص الفاتورة بتنسيق أفضل
-            invoice_text = f"""        ████████ محل البركة ████████
-        العنوان: شارع النصر – القاهرة
-        الهاتف: 0100-123-4567
-+----------------------------------------+
-| الاسم: {customer_name:<30} |
-| رقم الهاتف: {customer_phone:<26} |
-| رقم الفاتورة: {invoice_id:<24} |
-| الباركود: {barcode:<28} |
-| التاريخ: {invoice_date:<29} |
-+----------------------------------------+
-| الصنف              | الكمية | السعر  | الإجمالي |
-+----------------------------------------+
-"""
-            # إضافة المنتجات
+            # إنشاء نص الفاتورة باستخدام الدالة الموحدة
+            invoice_text = self.generate_invoice_text(
+                invoice_id, customer_name, customer_phone, barcode, 
+                invoice_date, self.cart_items, subtotal, discount, total
+            )
+            
+            # تحديث كميات المنتجات
             for item in self.cart_items:
-                # تنسيق النص مع مراعاة العرض المناسب
-                product_line = f"| {item['name']:<18} | {item['quantity']:^6} | {item['price']:>6.2f} | {item['total']:>8.2f} |\n"
-                invoice_text += product_line
-                
-                # تحديث كمية المنتج
                 try:
                     success, message = ProductModel.update_product_quantity(item["product_id"], item["quantity"])
                     if not success:
@@ -746,17 +878,7 @@ class Dashboard:
                 except Exception as e:
                     messagebox.showwarning("تحذير", f"خطأ في تحديث كمية المنتج {item['name']}: {str(e)}")
             
-            # إكمال الفاتورة مع تنسيق أفضل
-            invoice_text += f"""+----------------------------------------+
-| الإجمالي قبل الخصم:           {subtotal:>10.2f} |
-| الخصم:                       {discount:>10.2f} |
-| الإجمالي بعد الخصم:          {total:>10.2f} |
-+----------------------------------------+
-         شكراً لتعاملكم معنا!
-      للاتصال: 0100-123-4567
-"""
-            
-            # حفظ الفاتورة في ملف
+            # حفظ الفاتورة في ملف نصي (للنسخة الاحتياطية)
             filename = f"invoice_{invoice_id}.txt"
             with open(filename, "w", encoding="utf-8") as f:
                 f.write(invoice_text)
@@ -892,15 +1014,22 @@ class Dashboard:
             # زر لحفظ الفاتورة
             def save_invoice():
                 save_path = filedialog.asksaveasfilename(
-                    defaultextension=".txt",
-                    initialfile=f"فاتورة_{invoice_id}.txt",
-                    filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
+                    defaultextension=".ps",
+                    initialfile=f"فاتورة_{invoice_id}.ps",
+                    filetypes=[("PostScript files", "*.ps"), ("Text files", "*.txt"), ("All files", "*.*")]
                 )
                 if save_path:
                     try:
-                        with open(save_path, "w", encoding="utf-8") as f:
-                            f.write(invoice_text)
-                        messagebox.showinfo("حفظ الفاتورة", f"تم حفظ الفاتورة بنجاح في:\n{save_path}")
+                        if save_path.endswith('.ps'):
+                            # حفظ كصورة باستخدام postscript
+                            content_frame.update()
+                            canvas.postscript(file=save_path)
+                            messagebox.showinfo("حفظ الفاتورة", f"تم حفظ الفاتورة كصورة في:\n{save_path}")
+                        else:
+                            # حفظ كنص
+                            with open(save_path, "w", encoding="utf-8") as f:
+                                f.write(invoice_text)
+                            messagebox.showinfo("حفظ الفاتورة", f"تم حفظ الفاتورة كنص في:\n{save_path}")
                     except Exception as e:
                         messagebox.showerror("خطأ", f"فشل حفظ الفاتورة: {str(e)}")
             
@@ -1301,81 +1430,11 @@ class Dashboard:
                         content_frame = ttk.Frame(canvas)
                         canvas.create_window((0, 0), window=content_frame, anchor="nw")
                         
-                        # الشعار والترويسة
-                        header_frame = ttk.Frame(content_frame)
-                        header_frame.pack(fill="x", padx=10, pady=5)
-                        
-                        ttk.Label(header_frame, text="محل البركة", font=("Arial", 18, "bold")).pack(pady=5)
-                        ttk.Label(header_frame, text="العنوان: شارع النصر – القاهرة", font=("Arial", 10)).pack()
-                        ttk.Label(header_frame, text="الهاتف: 0100-123-4567", font=("Arial", 10)).pack(pady=2)
-                        
-                        ttk.Separator(content_frame).pack(fill="x", padx=10, pady=5)
-                        
-                        # معلومات الفاتورة
-                        info_frame = ttk.Frame(content_frame)
-                        info_frame.pack(fill="x", padx=10, pady=5)
-                        
-                        # استخدام شبكة للمعلومات
-                        ttk.Label(info_frame, text="الاسم:", font=("Arial", 10, "bold")).grid(row=0, column=0, sticky="e", padx=5, pady=2)
-                        ttk.Label(info_frame, text=customer_name).grid(row=0, column=1, sticky="w", padx=5, pady=2)
-                        
-                        ttk.Label(info_frame, text="رقم الهاتف:", font=("Arial", 10, "bold")).grid(row=1, column=0, sticky="e", padx=5, pady=2)
-                        ttk.Label(info_frame, text=customer_phone).grid(row=1, column=1, sticky="w", padx=5, pady=2)
-                        
-                        ttk.Label(info_frame, text="رقم الفاتورة:", font=("Arial", 10, "bold")).grid(row=0, column=2, sticky="e", padx=5, pady=2)
-                        ttk.Label(info_frame, text=str(invoice_id)).grid(row=0, column=3, sticky="w", padx=5, pady=2)
-                        
-                        ttk.Label(info_frame, text="التاريخ:", font=("Arial", 10, "bold")).grid(row=1, column=2, sticky="e", padx=5, pady=2)
-                        ttk.Label(info_frame, text=invoice_date).grid(row=1, column=3, sticky="w", padx=5, pady=2)
-                        
-                        if barcode:
-                            ttk.Label(info_frame, text="الباركود:", font=("Arial", 10, "bold")).grid(row=2, column=0, sticky="e", padx=5, pady=2)
-                            ttk.Label(info_frame, text=barcode).grid(row=2, column=1, sticky="w", padx=5, pady=2)
-                        
-                        ttk.Separator(content_frame).pack(fill="x", padx=10, pady=5)
-                        
-                        # جدول المنتجات
-                        items_frame = ttk.Frame(content_frame)
-                        items_frame.pack(fill="x", padx=10, pady=5)
-                        
-                        # عناوين الجدول
-                        ttk.Label(items_frame, text="الصنف", font=("Arial", 10, "bold")).grid(row=0, column=0, padx=5, pady=2, sticky="w")
-                        ttk.Label(items_frame, text="الكمية", font=("Arial", 10, "bold")).grid(row=0, column=1, padx=5, pady=2)
-                        ttk.Label(items_frame, text="السعر", font=("Arial", 10, "bold")).grid(row=0, column=2, padx=5, pady=2)
-                        ttk.Label(items_frame, text="الإجمالي", font=("Arial", 10, "bold")).grid(row=0, column=3, padx=5, pady=2)
-                        
-                        ttk.Separator(items_frame, orient="horizontal").grid(row=1, columnspan=4, sticky="ew", padx=5, pady=2)
-                        
-                        # إضافة المنتجات للجدول
-                        for i, item in enumerate(items):
-                            ttk.Label(items_frame, text=item['name']).grid(row=i+2, column=0, padx=5, pady=2, sticky="w")
-                            ttk.Label(items_frame, text=str(item['quantity'])).grid(row=i+2, column=1, padx=5, pady=2)
-                            ttk.Label(items_frame, text=f"{item['price']:.2f}").grid(row=i+2, column=2, padx=5, pady=2)
-                            ttk.Label(items_frame, text=f"{item['total']:.2f}").grid(row=i+2, column=3, padx=5, pady=2)
-                        
-                        ttk.Separator(content_frame).pack(fill="x", padx=10, pady=5)
-                        
-                        # إجماليات
-                        totals_frame = ttk.Frame(content_frame)
-                        totals_frame.pack(fill="x", padx=10, pady=5)
-                        
-                        ttk.Label(totals_frame, text="الإجمالي قبل الخصم:", font=("Arial", 10, "bold")).grid(row=0, column=0, padx=5, pady=2, sticky="e")
-                        ttk.Label(totals_frame, text=f"{subtotal:.2f}").grid(row=0, column=1, padx=5, pady=2, sticky="w")
-                        
-                        ttk.Label(totals_frame, text="الخصم:", font=("Arial", 10, "bold")).grid(row=1, column=0, padx=5, pady=2, sticky="e")
-                        ttk.Label(totals_frame, text=f"{discount:.2f}").grid(row=1, column=1, padx=5, pady=2, sticky="w")
-                        
-                        ttk.Label(totals_frame, text="الإجمالي بعد الخصم:", font=("Arial", 10, "bold")).grid(row=2, column=0, padx=5, pady=2, sticky="e")
-                        ttk.Label(totals_frame, text=f"{total:.2f}", font=("Arial", 12, "bold")).grid(row=2, column=1, padx=5, pady=2, sticky="w")
-                        
-                        ttk.Separator(content_frame).pack(fill="x", padx=10, pady=5)
-                        
-                        # تذييل
-                        footer_frame = ttk.Frame(content_frame)
-                        footer_frame.pack(fill="x", padx=10, pady=5)
-                        
-                        ttk.Label(footer_frame, text="شكراً لتعاملكم معنا!", font=("Arial", 12, "bold")).pack(pady=2)
-                        ttk.Label(footer_frame, text="للاتصال: 0100-123-4567").pack()
+                        # استخدام الدالة الموحدة لإنشاء واجهة الفاتورة
+                        self.create_invoice_canvas_widget(
+                            content_frame, invoice_id, customer_name, customer_phone, 
+                            barcode, invoice_date, items, subtotal, discount, total
+                        )
                         
                         # تحديث حجم المنطقة القابلة للتمرير
                         content_frame.update_idletasks()
@@ -1393,16 +1452,29 @@ class Dashboard:
                         
                         # زر لحفظ الفاتورة
                         def save_invoice():
+                            # إنشاء نص الفاتورة باستخدام الدالة الموحدة
+                            invoice_text = self.generate_invoice_text(
+                                invoice_id, customer_name, customer_phone, barcode, 
+                                invoice_date, items, subtotal, discount, total
+                            )
+                            
                             save_path = filedialog.asksaveasfilename(
-                                defaultextension=".txt",
-                                initialfile=f"فاتورة_{invoice_id}.txt",
-                                filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
+                                defaultextension=".ps",
+                                initialfile=f"فاتورة_{invoice_id}.ps",
+                                filetypes=[("PostScript files", "*.ps"), ("Text files", "*.txt"), ("All files", "*.*")]
                             )
                             if save_path:
                                 try:
-                                    with open(save_path, "w", encoding="utf-8") as f:
-                                        f.write(content)
-                                    messagebox.showinfo("حفظ الفاتورة", f"تم حفظ الفاتورة بنجاح في:\n{save_path}")
+                                    if save_path.endswith('.ps'):
+                                        # حفظ كصورة باستخدام postscript
+                                        content_frame.update()
+                                        canvas.postscript(file=save_path)
+                                        messagebox.showinfo("حفظ الفاتورة", f"تم حفظ الفاتورة كصورة في:\n{save_path}")
+                                    else:
+                                        # حفظ كنص
+                                        with open(save_path, "w", encoding="utf-8") as f:
+                                            f.write(invoice_text)
+                                        messagebox.showinfo("حفظ الفاتورة", f"تم حفظ الفاتورة كنص في:\n{save_path}")
                                 except Exception as e:
                                     messagebox.showerror("خطأ", f"فشل حفظ الفاتورة: {str(e)}")
                         
