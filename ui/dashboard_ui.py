@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox, simpledialog, filedialog
 from models.product_model import ProductModel
 from models.invoice_model import InvoiceModel
 from models.user_model import UserModel
+from models.return_model import ReturnModel
 import time
 from datetime import datetime
 import random
@@ -80,6 +81,11 @@ class Dashboard:
         self.sales_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.sales_tab, text="المبيعات")
         self.setup_sales_tab()
+        
+        # تبويب المرتجعات
+        self.returns_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.returns_tab, text="المرتجعات")
+        self.setup_returns_tab()
         
         # تبويب التقارير
         self.reports_tab = ttk.Frame(self.notebook)
@@ -1112,6 +1118,384 @@ class Dashboard:
             
         except Exception as e:
             messagebox.showerror("خطأ", f"فشل في حفظ الفاتورة: {str(e)}")
+
+    def setup_returns_tab(self):
+        """إعداد تبويب المرتجعات"""
+        returns_frame = ttk.Frame(self.returns_tab)
+        returns_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # العنوان
+        ttk.Label(returns_frame, text="إدارة المرتجعات", font=("Arial", 16, "bold")).pack(pady=10)
+        
+        # إطار الأزرار العلوية
+        top_buttons_frame = ttk.Frame(returns_frame)
+        top_buttons_frame.pack(fill="x", pady=5)
+        
+        self.create_button(top_buttons_frame, "إرجاع منتجات", self.open_return_dialog).pack(side="right", padx=5)
+        self.create_button(top_buttons_frame, "تحديث القائمة", self.load_returns).pack(side="left", padx=5)
+        
+        # إطار البحث
+        search_frame = ttk.Frame(returns_frame)
+        search_frame.pack(fill="x", pady=5)
+        
+        ttk.Label(search_frame, text="بحث برقم الفاتورة:").pack(side="right", padx=5)
+        self.return_search_var = tk.StringVar()
+        self.return_search_var.trace("w", lambda name, index, mode: self.filter_returns())
+        ttk.Entry(search_frame, textvariable=self.return_search_var, width=30).pack(side="right", padx=5)
+        
+        # جدول المرتجعات
+        columns = ("return_id", "original_invoice", "customer_name", "return_code", "amount", "date", "user")
+        self.returns_tree = ttk.Treeview(returns_frame, columns=columns, show="headings", selectmode="browse")
+        
+        # تعيين العناوين
+        self.returns_tree.heading("return_id", text="رقم الإرجاع")
+        self.returns_tree.heading("original_invoice", text="رقم الفاتورة الأصلية")
+        self.returns_tree.heading("customer_name", text="اسم العميل")
+        self.returns_tree.heading("return_code", text="رمز الإرجاع")
+        self.returns_tree.heading("amount", text="مبلغ الإرجاع")
+        self.returns_tree.heading("date", text="التاريخ")
+        self.returns_tree.heading("user", text="المستخدم")
+        
+        # تعيين عرض الأعمدة
+        self.returns_tree.column("return_id", width=80, anchor="center")
+        self.returns_tree.column("original_invoice", width=120, anchor="center")
+        self.returns_tree.column("customer_name", width=150, anchor="e")
+        self.returns_tree.column("return_code", width=100, anchor="center")
+        self.returns_tree.column("amount", width=100, anchor="center")
+        self.returns_tree.column("date", width=120, anchor="center")
+        self.returns_tree.column("user", width=100, anchor="center")
+        
+        # شريط التمرير للجدول
+        returns_scrollbar = ttk.Scrollbar(returns_frame, orient="vertical", command=self.returns_tree.yview)
+        self.returns_tree.configure(yscrollcommand=returns_scrollbar.set)
+        
+        # وضع الجدول وشريط التمرير
+        returns_scrollbar.pack(side="left", fill="y")
+        self.returns_tree.pack(side="right", fill="both", expand=True, padx=(0, 10), pady=10)
+        
+        # ربط أحداث النقر المزدوج
+        self.returns_tree.bind("<Double-1>", self.view_return_details)
+        
+        # تحميل البيانات
+        self.load_returns()
+    
+    def load_returns(self):
+        """تحميل قائمة المرتجعات"""
+        # مسح البيانات الحالية
+        for item in self.returns_tree.get_children():
+            self.returns_tree.delete(item)
+        
+        # الحصول على المرتجعات
+        success, returns = ReturnModel.get_all_returns()
+        
+        if success:
+            for ret in returns:
+                # إضافة المرتجع إلى الجدول
+                self.returns_tree.insert("", "end", values=(
+                    ret["id"],
+                    ret["original_invoice_id"],
+                    ret["customer_name"],
+                    ret["return_code"],
+                    f"{ret['total_return_amount']:.2f}",
+                    ret["created_at"][:10],  # عرض التاريخ فقط
+                    ret["username"]
+                ))
+        else:
+            messagebox.showerror("خطأ", f"فشل في تحميل المرتجعات: {returns}")
+    
+    def filter_returns(self):
+        """فلترة المرتجعات حسب رقم الفاتورة"""
+        search_term = self.return_search_var.get().lower()
+        
+        # مسح البيانات الحالية
+        for item in self.returns_tree.get_children():
+            self.returns_tree.delete(item)
+        
+        # الحصول على المرتجعات
+        success, returns = ReturnModel.get_all_returns()
+        
+        if success:
+            for ret in returns:
+                # التحقق من مطابقة البحث
+                if (search_term == "" or 
+                    search_term in str(ret["original_invoice_id"]) or
+                    search_term in ret["customer_name"].lower() or
+                    search_term in ret["return_code"].lower()):
+                    
+                    self.returns_tree.insert("", "end", values=(
+                        ret["id"],
+                        ret["original_invoice_id"],
+                        ret["customer_name"],
+                        ret["return_code"],
+                        f"{ret['total_return_amount']:.2f}",
+                        ret["created_at"][:10],
+                        ret["username"]
+                    ))
+    
+    def open_return_dialog(self):
+        """فتح نافذة إرجاع المنتجات"""
+        return_window = tk.Toplevel(self.root)
+        return_window.title("إرجاع منتجات")
+        return_window.geometry("800x600")
+        return_window.transient(self.root)
+        return_window.grab_set()
+        
+        # العنوان
+        ttk.Label(return_window, text="إرجاع منتجات من فاتورة سابقة", font=("Arial", 14, "bold")).pack(pady=10)
+        
+        # إطار البحث عن الفاتورة
+        search_frame = ttk.LabelFrame(return_window, text="البحث عن الفاتورة")
+        search_frame.pack(fill="x", padx=10, pady=5)
+        
+        ttk.Label(search_frame, text="رقم الفاتورة:").grid(row=0, column=0, padx=5, pady=5, sticky="e")
+        invoice_id_var = tk.StringVar()
+        invoice_entry = ttk.Entry(search_frame, textvariable=invoice_id_var, width=20)
+        invoice_entry.grid(row=0, column=1, padx=5, pady=5)
+        
+        def search_invoice():
+            invoice_id = invoice_id_var.get().strip()
+            if not invoice_id:
+                messagebox.showwarning("تحذير", "الرجاء إدخال رقم الفاتورة")
+                return
+            
+            try:
+                invoice_id = int(invoice_id)
+                success, invoice = InvoiceModel.get_invoice(invoice_id)
+                
+                if success:
+                    # عرض تفاصيل الفاتورة
+                    self.display_invoice_for_return(return_window, invoice)
+                else:
+                    messagebox.showerror("خطأ", f"لم يتم العثور على الفاتورة: {invoice}")
+            except ValueError:
+                messagebox.showerror("خطأ", "رقم الفاتورة غير صحيح")
+        
+        ttk.Button(search_frame, text="بحث", command=search_invoice).grid(row=0, column=2, padx=5, pady=5)
+        
+        # التركيز على مربع النص
+        invoice_entry.focus()
+        return_window.bind('<Return>', lambda e: search_invoice())
+    
+    def display_invoice_for_return(self, parent_window, invoice):
+        """عرض تفاصيل الفاتورة لاختيار المنتجات المراد إرجاعها"""
+        # مسح المحتوى السابق إن وجد
+        for widget in parent_window.winfo_children():
+            if isinstance(widget, ttk.Frame) and widget.winfo_name() != 'search_frame':
+                widget.destroy()
+        
+        # إطار تفاصيل الفاتورة
+        details_frame = ttk.LabelFrame(parent_window, text="تفاصيل الفاتورة")
+        details_frame.pack(fill="x", padx=10, pady=5)
+        
+        ttk.Label(details_frame, text=f"رقم الفاتورة: {invoice['id']}").grid(row=0, column=0, padx=5, pady=2, sticky="w")
+        ttk.Label(details_frame, text=f"العميل: {invoice['customer_name']}").grid(row=0, column=1, padx=5, pady=2, sticky="w")
+        ttk.Label(details_frame, text=f"التاريخ: {invoice['created_at'][:10]}").grid(row=1, column=0, padx=5, pady=2, sticky="w")
+        ttk.Label(details_frame, text=f"الإجمالي: {invoice['total']:.2f} جنيه").grid(row=1, column=1, padx=5, pady=2, sticky="w")
+        
+        # إطار المنتجات
+        items_frame = ttk.LabelFrame(parent_window, text="المنتجات - اختر المنتجات المراد إرجاعها")
+        items_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        
+        # جدول المنتجات مع checkboxes
+        columns = ("select", "name", "price", "original_qty", "return_qty")
+        items_tree = ttk.Treeview(items_frame, columns=columns, show="headings", height=8)
+        
+        items_tree.heading("select", text="اختيار")
+        items_tree.heading("name", text="اسم المنتج")
+        items_tree.heading("price", text="السعر")
+        items_tree.heading("original_qty", text="الكمية الأصلية")
+        items_tree.heading("return_qty", text="كمية الإرجاع")
+        
+        items_tree.column("select", width=60, anchor="center")
+        items_tree.column("name", width=200, anchor="e")
+        items_tree.column("price", width=100, anchor="center")
+        items_tree.column("original_qty", width=100, anchor="center")
+        items_tree.column("return_qty", width=120, anchor="center")
+        
+        # إضافة المنتجات
+        return_items = []
+        for item in invoice['items']:
+            item_id = items_tree.insert("", "end", values=(
+                "☐", item['name'], f"{item['price']:.2f}", 
+                item['quantity'], "0"
+            ))
+            return_items.append({
+                'tree_id': item_id,
+                'product_id': item['product_id'],
+                'name': item['name'],
+                'price': item['price'],
+                'original_quantity': item['quantity'],
+                'return_quantity': 0,
+                'selected': False
+            })
+        
+        def on_item_click(event):
+            """التعامل مع النقر على المنتج"""
+            item_id = items_tree.selection()[0] if items_tree.selection() else None
+            if item_id:
+                # العثور على المنتج المقابل
+                for i, ret_item in enumerate(return_items):
+                    if ret_item['tree_id'] == item_id:
+                        # تبديل حالة الاختيار
+                        return_items[i]['selected'] = not return_items[i]['selected']
+                        
+                        # تحديث العرض
+                        current_values = list(items_tree.item(item_id, 'values'))
+                        current_values[0] = "☑" if return_items[i]['selected'] else "☐"
+                        
+                        # إذا تم اختيار المنتج، اطلب كمية الإرجاع
+                        if return_items[i]['selected']:
+                            qty_dialog = simpledialog.askinteger(
+                                "كمية الإرجاع",
+                                f"كم قطعة تريد إرجاعها من '{ret_item['name']}'؟\n"
+                                f"الكمية الأصلية: {ret_item['original_quantity']}",
+                                minvalue=1,
+                                maxvalue=ret_item['original_quantity']
+                            )
+                            if qty_dialog:
+                                return_items[i]['return_quantity'] = qty_dialog
+                                current_values[4] = str(qty_dialog)
+                            else:
+                                return_items[i]['selected'] = False
+                                current_values[0] = "☐"
+                                current_values[4] = "0"
+                        else:
+                            return_items[i]['return_quantity'] = 0
+                            current_values[4] = "0"
+                        
+                        items_tree.item(item_id, values=current_values)
+                        break
+        
+        items_tree.bind("<Button-1>", on_item_click)
+        
+        # شريط تمرير للجدول
+        items_scrollbar = ttk.Scrollbar(items_frame, orient="vertical", command=items_tree.yview)
+        items_tree.configure(yscrollcommand=items_scrollbar.set)
+        
+        items_scrollbar.pack(side="left", fill="y")
+        items_tree.pack(side="right", fill="both", expand=True)
+        
+        # إطار الأزرار
+        buttons_frame = ttk.Frame(parent_window)
+        buttons_frame.pack(fill="x", padx=10, pady=10)
+        
+        def process_return():
+            """معالجة عملية الإرجاع"""
+            selected_items = [item for item in return_items if item['selected'] and item['return_quantity'] > 0]
+            
+            if not selected_items:
+                messagebox.showwarning("تحذير", "الرجاء اختيار منتجات للإرجاع")
+                return
+            
+            # حساب إجمالي مبلغ الإرجاع
+            total_return = sum(item['price'] * item['return_quantity'] for item in selected_items)
+            
+            # إنشاء رمز الإرجاع
+            return_code = "#R" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+            
+            # إنشاء عملية الإرجاع
+            success, result = ReturnModel.create_return(
+                user_id=self.user['id'],
+                original_invoice_id=invoice['id'],
+                customer_name=invoice['customer_name'],
+                customer_phone=invoice['customer_phone'],
+                return_code=return_code,
+                items=[{
+                    'product_id': item['product_id'],
+                    'name': item['name'],
+                    'price': item['price'],
+                    'quantity': item['return_quantity'],
+                    'total': item['price'] * item['return_quantity']
+                } for item in selected_items],
+                total_return_amount=total_return
+            )
+            
+            if success:
+                # تحديث كميات المنتجات في المخزون
+                for item in selected_items:
+                    # إضافة الكمية المرتجعة إلى المخزون
+                    ProductModel.add_product_quantity(item['product_id'], item['return_quantity'])
+                
+                messagebox.showinfo("نجح الإرجاع", 
+                                  f"تم إرجاع المنتجات بنجاح\n"
+                                  f"رمز الإرجاع: {return_code}\n"
+                                  f"مبلغ الإرجاع: {total_return:.2f} جنيه")
+                
+                # إغلاق النافذة وتحديث القائمة
+                parent_window.destroy()
+                self.load_returns()
+                self.load_products()  # تحديث قائمة المنتجات
+            else:
+                messagebox.showerror("خطأ", f"فشل في إتمام عملية الإرجاع: {result}")
+        
+        ttk.Button(buttons_frame, text="تأكيد الإرجاع", command=process_return).pack(side="right", padx=5)
+        ttk.Button(buttons_frame, text="إلغاء", command=parent_window.destroy).pack(side="right", padx=5)
+    
+    def view_return_details(self, event):
+        """عرض تفاصيل عملية إرجاع"""
+        selected_item = self.returns_tree.selection()
+        if not selected_item:
+            return
+        
+        return_id = self.returns_tree.item(selected_item[0], 'values')[0]
+        
+        success, return_data = ReturnModel.get_return(int(return_id))
+        
+        if success:
+            # إنشاء نافذة عرض التفاصيل
+            details_window = tk.Toplevel(self.root)
+            details_window.title(f"تفاصيل إرجاع رقم {return_id}")
+            details_window.geometry("600x500")
+            details_window.transient(self.root)
+            
+            # إطار المحتوى
+            main_frame = ttk.Frame(details_window)
+            main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+            
+            # معلومات الإرجاع
+            info_frame = ttk.LabelFrame(main_frame, text="معلومات الإرجاع")
+            info_frame.pack(fill="x", pady=5)
+            
+            ttk.Label(info_frame, text=f"رقم الإرجاع: {return_data['id']}").grid(row=0, column=0, padx=5, pady=2, sticky="w")
+            ttk.Label(info_frame, text=f"رقم الفاتورة الأصلية: {return_data['original_invoice_id']}").grid(row=0, column=1, padx=5, pady=2, sticky="w")
+            ttk.Label(info_frame, text=f"العميل: {return_data['customer_name']}").grid(row=1, column=0, padx=5, pady=2, sticky="w")
+            ttk.Label(info_frame, text=f"رمز الإرجاع: {return_data['return_code']}").grid(row=1, column=1, padx=5, pady=2, sticky="w")
+            ttk.Label(info_frame, text=f"التاريخ: {return_data['created_at']}").grid(row=2, column=0, padx=5, pady=2, sticky="w")
+            ttk.Label(info_frame, text=f"المستخدم: {return_data['username']}").grid(row=2, column=1, padx=5, pady=2, sticky="w")
+            
+            # المنتجات المرتجعة
+            items_frame = ttk.LabelFrame(main_frame, text="المنتجات المرتجعة")
+            items_frame.pack(fill="both", expand=True, pady=5)
+            
+            columns = ("name", "price", "quantity", "total")
+            items_tree = ttk.Treeview(items_frame, columns=columns, show="headings")
+            
+            items_tree.heading("name", text="اسم المنتج")
+            items_tree.heading("price", text="السعر")
+            items_tree.heading("quantity", text="الكمية")
+            items_tree.heading("total", text="الإجمالي")
+            
+            for item in return_data['items']:
+                items_tree.insert("", "end", values=(
+                    item['name'],
+                    f"{item['price']:.2f}",
+                    item['quantity'],
+                    f"{item['total']:.2f}"
+                ))
+            
+            items_tree.pack(fill="both", expand=True, padx=5, pady=5)
+            
+            # الإجمالي
+            total_frame = ttk.Frame(main_frame)
+            total_frame.pack(fill="x", pady=5)
+            
+            ttk.Label(total_frame, text=f"إجمالي مبلغ الإرجاع: {return_data['total_return_amount']:.2f} جنيه", 
+                     font=("Arial", 12, "bold"), foreground="red").pack(anchor="e")
+            
+            # زر الإغلاق
+            ttk.Button(main_frame, text="إغلاق", command=details_window.destroy).pack(pady=10)
+        else:
+            messagebox.showerror("خطأ", f"فشل في الحصول على تفاصيل الإرجاع: {return_data}")
 
     def setup_reports_tab(self):
         reports_frame = ttk.Frame(self.reports_tab)

@@ -282,6 +282,55 @@ class ProductModel:
             return False, f"خطأ في تحديث كمية المنتج: {str(e)}"
     
     @classmethod
+    def add_product_quantity(cls, product_id, returned_quantity):
+        """
+        إضافة كمية للمنتج (عند الإرجاع)
+        
+        Args:
+            product_id (int): معرف المنتج
+            returned_quantity (int): الكمية المرتجعة
+            
+        Returns:
+            tuple: (success, message)
+        """
+        try:
+            # التأكد من وجود قاعدة البيانات
+            cls._ensure_db_exists()
+            
+            # التحقق من صحة البيانات
+            if returned_quantity <= 0:
+                return False, "الكمية المرتجعة يجب أن تكون أكبر من صفر"
+            
+            # الاتصال بقاعدة البيانات
+            conn = sqlite3.connect(cls.db_path)
+            cursor = conn.cursor()
+            
+            # التحقق من وجود المنتج
+            cursor.execute("SELECT sold FROM products WHERE id = ?", (product_id,))
+            product = cursor.fetchone()
+            
+            if not product:
+                conn.close()
+                return False, "المنتج غير موجود"
+            
+            # التأكد من أن الكمية المرتجعة لا تتجاوز الكمية المباعة
+            if product[0] < returned_quantity:
+                conn.close()
+                return False, "الكمية المرتجعة تتجاوز الكمية المباعة"
+            
+            # إضافة الكمية للمنتج وتقليل عدد المبيعات
+            cursor.execute(
+                "UPDATE products SET quantity = quantity + ?, sold = sold - ? WHERE id = ?",
+                (returned_quantity, returned_quantity, product_id)
+            )
+            conn.commit()
+            conn.close()
+            return True, "تم إضافة الكمية المرتجعة بنجاح"
+                
+        except Exception as e:
+            return False, f"خطأ في إضافة كمية المنتج: {str(e)}"
+    
+    @classmethod
     def delete_product(cls, product_id):
         """
         حذف منتج
