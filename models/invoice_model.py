@@ -1,219 +1,286 @@
-import mysql.connector
+import sqlite3
+import os
 from datetime import datetime
-import json
-import logging
-
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
 
 class InvoiceModel:
-    def __init__(self, db_config):
-        self.db_config = db_config
-
-    def create_invoice(self, invoice_data):
+    """
+    فئة نموذج الفاتورة - تتعامل مع كل عمليات الفواتير في قاعدة البيانات
+    """
+    
+    # مسار قاعدة البيانات
+    db_path = "data/store.db"
+    
+    @classmethod
+    def _ensure_db_exists(cls):
+        """التأكد من وجود قاعدة البيانات وإنشاء الجداول إذا لم تكن موجودة"""
+        # التأكد من وجود مجلد البيانات
+        os.makedirs(os.path.dirname(cls.db_path), exist_ok=True)
+        
+        # إنشاء الاتصال بقاعدة البيانات
+        conn = sqlite3.connect(cls.db_path)
+        cursor = conn.cursor()
+        
+        # إنشاء جدول الفواتير إذا لم يكن موجوداً
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS invoices (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                customer_name TEXT,
+                customer_phone TEXT,
+                barcode TEXT,
+                subtotal REAL NOT NULL,
+                discount REAL NOT NULL DEFAULT 0,
+                total REAL NOT NULL,
+                user_id INTEGER,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        ''')
+        
+        # إنشاء جدول عناصر الفاتورة إذا لم يكن موجوداً
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS invoice_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                invoice_id INTEGER NOT NULL,
+                product_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                price REAL NOT NULL,
+                quantity INTEGER NOT NULL,
+                item_total REAL NOT NULL,
+                FOREIGN KEY (invoice_id) REFERENCES invoices(id),
+                FOREIGN KEY (product_id) REFERENCES products(id)
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
+    
+    @classmethod
+    def create_invoice(cls, user_id, customer_name, customer_phone, barcode, items, subtotal, discount, total):
         """
-        Create a new invoice with improved validation and error handling.
-        Returns a tuple of (success, message, invoice_id)
+        إنشاء فاتورة جديدة
+        
+        Args:
+            user_id (int): معرف المستخدم الذي أنشأ الفاتورة
+            customer_name (str): اسم العميل
+            customer_phone (str): رقم هاتف العميل
+            barcode (str): رمز الباركود
+            items (list): قائمة العناصر في الفاتورة (منتج، كمية، سعر، إجمالي)
+            subtotal (float): إجمالي الفاتورة قبل الخصم
+            discount (float): مقدار الخصم
+            total (float): إجمالي الفاتورة بعد الخصم
+            
+        Returns:
+            tuple: (success, result)
+                - success (bool): نجاح العملية
+                - result (int/str): معرف الفاتورة أو رسالة الخطأ
         """
         try:
-            connection = mysql.connector.connect(**self.db_config)
-            cursor = connection.cursor(dictionary=True)
-
-            # Start a transaction - important for data integrity
-            connection.start_transaction()
-
-            # Extract invoice data
-            items = invoice_data.get('items', [])
-            customer_name = invoice_data.get('customer_name', '')
-            discount = float(invoice_data.get('discount', 0))
-            discount_type = invoice_data.get('discount_type', 'amount')  # 'amount' or 'percentage'
-
-            # Calculate subtotal
-            subtotal = sum(item['price'] * item['quantity'] for item in items)
-
-            # Calculate final total based on discount type
-            if discount_type == 'percentage':
-                if discount < 0 or discount > 100:
-                    raise ValueError("Percentage discount must be between 0 and 100")
-                total = subtotal * (1 - discount / 100)
-            else:  # amount
-                if discount < 0 or discount > subtotal:
-                    raise ValueError("Amount discount cannot be negative or exceed the subtotal")
-                total = subtotal - discount
-
-            # Validate all items have sufficient stock BEFORE making any changes
-            for item in items:
-                cursor.execute("SELECT quantity, name FROM products WHERE id = %s", (item["product_id"],))
-                result = cursor.fetchone()
-                if not result:
-                    raise ValueError(f"Product with ID {item['product_id']} does not exist")
-
-                available_quantity = result['quantity']
-                product_name = result['name']
-
-                if item["quantity"] > available_quantity:
-                    raise ValueError(
-                        f"Insufficient stock for '{product_name}'. Available: {available_quantity}, Requested: {item['quantity']}")
-
-            # Create the invoice
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            # التأكد من وجود قاعدة البيانات
+            cls._ensure_db_exists()
+            
+            # الاتصال بقاعدة البيانات
+            conn = sqlite3.connect(cls.db_path)
+            cursor = conn.cursor()
+            
+            # تاريخ الإنشاء
+            created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            # إنشاء الفاتورة
             cursor.execute(
-                "INSERT INTO invoices (date, subtotal, discount, total, discount_type, customer_name) VALUES (%s, %s, %s, %s, %s, %s)",
-                (current_time, subtotal, discount, total, discount_type, customer_name)
+                """INSERT INTO invoices 
+                   (customer_name, customer_phone, barcode, subtotal, discount, total, user_id, created_at) 
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (customer_name, customer_phone, barcode, subtotal, discount, total, user_id, created_at)
             )
-
+            
+            # الحصول على معرف الفاتورة المنشأة
             invoice_id = cursor.lastrowid
-
-            # Add items to invoice_items and update product inventory
+            
+            # إضافة عناصر الفاتورة
             for item in items:
-                product_id = item["product_id"]
-                quantity = item["quantity"]
-                price = item["price"]
-
-                # Add to invoice_items
                 cursor.execute(
-                    "INSERT INTO invoice_items (invoice_id, product_id, quantity, price) VALUES (%s, %s, %s, %s)",
-                    (invoice_id, product_id, quantity, price)
+                    """INSERT INTO invoice_items 
+                       (invoice_id, product_id, name, price, quantity, item_total) 
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (invoice_id, item["product_id"], item["name"], item["price"], 
+                     item["quantity"], item["total"])
                 )
-
-                # Update product inventory and sales stats
-                cursor.execute(
-                    "UPDATE products SET quantity = quantity - %s, sold = sold + %s WHERE id = %s",
-                    (quantity, quantity, product_id)
-                )
-
-                # Verify the update was successful
-                if cursor.rowcount == 0:
-                    # This shouldn't happen if we validated correctly above, but just to be safe
-                    connection.rollback()
-                    return False, f"Failed to update inventory for product ID {product_id}", None
-
-            # Commit the transaction if everything succeeded
-            connection.commit()
-
-            # Log successful invoice creation
-            logger.info(f"Invoice #{invoice_id} created successfully at {current_time} by user: youssef3fifi")
-
-            # Format items for the response
-            formatted_items = []
-            for item in items:
-                cursor.execute("SELECT name FROM products WHERE id = %s", (item["product_id"],))
-                product_name = cursor.fetchone()['name']
-                formatted_items.append({
-                    'product_id': item["product_id"],
-                    'name': product_name,
-                    'quantity': item["quantity"],
-                    'price': item["price"]
-                })
-
-            # Prepare success message with invoice details
-            invoice_details = {
-                'invoice_id': invoice_id,
-                'date': current_time,
-                'items': formatted_items,
-                'subtotal': subtotal,
-                'discount': discount,
-                'discount_type': discount_type,
-                'total': total,
-                'customer_name': customer_name
-            }
-
-            success_message = f"Invoice #{invoice_id} completed successfully"
-
-            return True, success_message, invoice_details
-
-        except ValueError as e:
-            if connection:
-                connection.rollback()
-            logger.error(f"Validation error: {str(e)}")
-            return False, str(e), None
-
+            
+            conn.commit()
+            conn.close()
+            
+            return True, invoice_id
+            
         except Exception as e:
-            if connection:
-                connection.rollback()
-            logger.error(f"Error creating invoice: {str(e)}")
-            return False, f"Failed to complete invoice: {str(e)}", None
-
-        finally:
-            if cursor:
-                cursor.close()
-            if connection and connection.is_connected():
-                connection.close()
-
-    def get_invoice(self, invoice_id):
-        """Get invoice details by ID"""
+            return False, f"خطأ في إنشاء الفاتورة: {str(e)}"
+    
+    @classmethod
+    def get_invoice(cls, invoice_id):
+        """
+        الحصول على تفاصيل فاتورة
+        
+        Args:
+            invoice_id (int): معرف الفاتورة
+            
+        Returns:
+            tuple: (success, result)
+                - success (bool): نجاح العملية
+                - result (dict/str): بيانات الفاتورة أو رسالة الخطأ
+        """
         try:
-            connection = mysql.connector.connect(**self.db_config)
-            cursor = connection.cursor(dictionary=True)
-
-            # Get invoice header
-            cursor.execute(
-                "SELECT * FROM invoices WHERE id = %s",
-                (invoice_id,)
-            )
+            # التأكد من وجود قاعدة البيانات
+            cls._ensure_db_exists()
+            
+            # الاتصال بقاعدة البيانات
+            conn = sqlite3.connect(cls.db_path)
+            conn.row_factory = sqlite3.Row  # للحصول على النتائج كقاموس
+            cursor = conn.cursor()
+            
+            # الحصول على بيانات الفاتورة
+            cursor.execute("""
+                SELECT i.*, u.username as user_name
+                FROM invoices i
+                LEFT JOIN users u ON i.user_id = u.id
+                WHERE i.id = ?
+            """, (invoice_id,))
+            
             invoice = cursor.fetchone()
-
+            
             if not invoice:
-                return False, f"Invoice #{invoice_id} not found", None
-
-            # Get invoice items
-            cursor.execute(
-                """
-                SELECT ii.*, p.name
-                FROM invoice_items ii
-                         JOIN products p ON ii.product_id = p.id
-                WHERE invoice_id = %s
-                """,
-                (invoice_id,)
-            )
-            items = cursor.fetchall()
-
-            invoice['items'] = items
-
-            return True, "Invoice retrieved successfully", invoice
-
+                conn.close()
+                return False, "الفاتورة غير موجودة"
+            
+            invoice_dict = dict(invoice)
+            
+            # الحصول على عناصر الفاتورة
+            cursor.execute("""
+                SELECT * FROM invoice_items
+                WHERE invoice_id = ?
+            """, (invoice_id,))
+            
+            items = [dict(row) for row in cursor.fetchall()]
+            invoice_dict["items"] = items
+            
+            conn.close()
+            return True, invoice_dict
+            
         except Exception as e:
-            logger.error(f"Error retrieving invoice: {str(e)}")
-            return False, f"Failed to retrieve invoice: {str(e)}", None
-
-        finally:
-            if cursor:
-                cursor.close()
-            if connection and connection.is_connected():
-                connection.close()
-
-    def get_all_invoices(self, limit=100, offset=0):
-        """Get a list of all invoices with pagination"""
+            return False, f"خطأ في استرجاع بيانات الفاتورة: {str(e)}"
+    
+    @classmethod
+    def get_daily_sales(cls, date=None):
+        """
+        الحصول على المبيعات اليومية
+        
+        Args:
+            date (str): التاريخ المطلوب بصيغة YYYY-MM-DD (اليوم الحالي إذا كانت None)
+            
+        Returns:
+            tuple: (success, result)
+                - success (bool): نجاح العملية
+                - result (dict/str): بيانات المبيعات أو رسالة الخطأ
+        """
         try:
-            connection = mysql.connector.connect(**self.db_config)
-            cursor = connection.cursor(dictionary=True)
-
-            # Get invoice headers
-            cursor.execute(
-                "SELECT * FROM invoices ORDER BY date DESC LIMIT %s OFFSET %s",
-                (limit, offset)
-            )
-            invoices = cursor.fetchall()
-
-            # Get total count for pagination
-            cursor.execute("SELECT COUNT(*) as total FROM invoices")
-            total = cursor.fetchone()['total']
-
-            return True, "Invoices retrieved successfully", {
-                'invoices': invoices,
-                'total': total,
-                'limit': limit,
-                'offset': offset
+            # التأكد من وجود قاعدة البيانات
+            cls._ensure_db_exists()
+            
+            # إعداد التاريخ المطلوب
+            if date is None:
+                date = datetime.now().strftime("%Y-%m-%d")
+            
+            # الاتصال بقاعدة البيانات
+            conn = sqlite3.connect(cls.db_path)
+            conn.row_factory = sqlite3.Row  # للحصول على النتائج كقاموس
+            cursor = conn.cursor()
+            
+            # الحصول على المبيعات اليومية
+            cursor.execute("""
+                SELECT i.*, u.username as user_name
+                FROM invoices i
+                LEFT JOIN users u ON i.user_id = u.id
+                WHERE DATE(i.created_at) = ?
+                ORDER BY i.created_at DESC
+            """, (date,))
+            
+            invoices = [dict(row) for row in cursor.fetchall()]
+            
+            # حساب الإجماليات
+            total_sales = sum(invoice["total"] for invoice in invoices)
+            total_items = 0
+            
+            for invoice in invoices:
+                # الحصول على عناصر كل فاتورة
+                cursor.execute("""
+                    SELECT * FROM invoice_items
+                    WHERE invoice_id = ?
+                """, (invoice["id"],))
+                
+                items = [dict(row) for row in cursor.fetchall()]
+                invoice["items"] = items
+                total_items += sum(item["quantity"] for item in items)
+            
+            conn.close()
+            
+            result = {
+                "date": date,
+                "invoices": invoices,
+                "total_sales": total_sales,
+                "total_invoices": len(invoices),
+                "total_items": total_items
             }
-
+            
+            return True, result
+            
         except Exception as e:
-            logger.error(f"Error retrieving invoices: {str(e)}")
-            return False, f"Failed to retrieve invoices: {str(e)}", None
-
-        finally:
-            if cursor:
-                cursor.close()
-            if connection and connection.is_connected():
-                connection.close()
+            return False, f"خطأ في استرجاع المبيعات اليومية: {str(e)}"
+    
+    @classmethod
+    def get_sales_by_date_range(cls, start_date, end_date):
+        """
+        الحصول على المبيعات في فترة زمنية محددة
+        
+        Args:
+            start_date (str): تاريخ البداية بصيغة YYYY-MM-DD
+            end_date (str): تاريخ النهاية بصيغة YYYY-MM-DD
+            
+        Returns:
+            tuple: (success, result)
+                - success (bool): نجاح العملية
+                - result (dict/str): بيانات المبيعات أو رسالة الخطأ
+        """
+        try:
+            # التأكد من وجود قاعدة البيانات
+            cls._ensure_db_exists()
+            
+            # الاتصال بقاعدة البيانات
+            conn = sqlite3.connect(cls.db_path)
+            conn.row_factory = sqlite3.Row  # للحصول على النتائج كقاموس
+            cursor = conn.cursor()
+            
+            # الحصول على المبيعات في الفترة الزمنية
+            cursor.execute("""
+                SELECT DATE(created_at) as date, 
+                       COUNT(*) as invoices_count,
+                       SUM(total) as total_sales
+                FROM invoices
+                WHERE DATE(created_at) BETWEEN ? AND ?
+                GROUP BY DATE(created_at)
+                ORDER BY date DESC
+            """, (start_date, end_date))
+            
+            daily_sales = [dict(row) for row in cursor.fetchall()]
+            
+            conn.close()
+            
+            result = {
+                "start_date": start_date,
+                "end_date": end_date,
+                "daily_sales": daily_sales,
+                "total_sales": sum(day["total_sales"] for day in daily_sales),
+                "total_invoices": sum(day["invoices_count"] for day in daily_sales)
+            }
+            
+            return True, result
+            
+        except Exception as e:
+            return False, f"خطأ في استرجاع المبيعات: {str(e)}"

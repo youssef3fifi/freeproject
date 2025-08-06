@@ -1,79 +1,167 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-import ttkbootstrap as ttkb
-from database.db_connection import connect
-from ui.new_windo import open_dashboard
-from models.user_model import verify_user
+from models.user_model import UserModel
+from ui.dashboard_ui import Dashboard
 
-class LoginUI:
+class Login:
     def __init__(self, root):
         self.root = root
-        self.setup_ui()
+        
+        # ضبط عنوان النافذة
+        self.root.title("نظام المبيعات - محل البركة - تسجيل الدخول")
+        
+        # ضبط حجم النافذة وجعلها في وسط الشاشة
+        window_width = 500
+        window_height = 350
+        
+        # الحصول على دقة الشاشة
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        
+        # حساب موضع مركز النافذة
+        center_x = int(screen_width/2 - window_width/2)
+        center_y = int(screen_height/2 - window_height/2)
+        
+        # ضبط حجم وموضع النافذة
+        self.root.geometry(f"{window_width}x{window_height}+{center_x}+{center_y}")
+        
+        # جعل النافذة ثابتة الحجم
+        self.root.resizable(False, False)
+        
+        # تخصيص مظهر النافذة
+        self.root.configure(bg="#f0f0f0")
+        
+        # محاولة تحميل أيقونة للتطبيق
+        try:
+            self.root.iconbitmap("assets/store_icon.ico")
+        except:
+            pass
+            
+        # تطبيق النمط
+        self.apply_style()
+        
+        # إنشاء واجهة تسجيل الدخول
+        self.setup_login_ui()
     
-    def setup_ui(self):
-        # Create main frame
-        self.main_frame = ttk.Frame(self.root, padding=20)
-        self.main_frame.pack(fill=tk.BOTH, expand=True)
+    def apply_style(self):
+        # تطبيق نمط وستايل على التطبيق
+        style = ttk.Style()
         
-        # Logo or app title
-        ttk.Label(
-            self.main_frame, 
-            text="Point of Sale System", 
-            font=("TkDefaultFont", 24, "bold")
-        ).pack(pady=(0, 20))
+        # استخدام السمة clam لمظهر أكثر احترافية
+        style.theme_use('clam')
         
-        # Login frame
-        login_frame = ttk.Frame(self.main_frame, padding=20)
-        login_frame.pack(pady=20)
+        # تخصيص ألوان الأزرار
+        style.configure('TButton', background='#4CAF50', foreground='black', font=('Arial', 10))
+        style.map('TButton', background=[('active', '#45a049')])
+        style.configure('Hover.TButton', background='#45a049')
         
-        # Username
-        ttk.Label(login_frame, text="Username:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        # تخصيص الإطارات
+        style.configure('TFrame', background='#f9f9f9')
+        style.configure('TLabel', background='#f9f9f9', font=('Arial', 10))
+        style.configure('TEntry', font=('Arial', 10))
+        
+        # تخصيص العنوان
+        style.configure('Title.TLabel', font=('Arial', 16, 'bold'), background='#f0f0f0')
+        
+        # تخصيص زر إعادة التعيين
+        style.configure('Reset.TButton', background='#f0f0f0', foreground='#666', font=('Arial', 8))
+    
+    def setup_login_ui(self):
+        # إنشاء إطار رئيسي
+        main_frame = ttk.Frame(self.root, style='TFrame')
+        main_frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER, width=400, height=250)
+        
+        # شعار المتجر (أو عنوان)
+        ttk.Label(main_frame, text="محل البركة", style='Title.TLabel').pack(pady=20)
+        
+        # إطار المدخلات
+        input_frame = ttk.Frame(main_frame)
+        input_frame.pack(pady=10)
+        
+        # مدخلات اسم المستخدم وكلمة المرور
+        ttk.Label(input_frame, text="اسم المستخدم:").grid(row=0, column=0, padx=10, pady=10, sticky="e")
         self.username_var = tk.StringVar()
-        username_entry = ttk.Entry(login_frame, textvariable=self.username_var, width=30)
-        username_entry.grid(row=0, column=1, sticky=tk.W, pady=5)
+        ttk.Entry(input_frame, textvariable=self.username_var, width=25).grid(row=0, column=1, padx=10, pady=10)
         
-        # Password
-        ttk.Label(login_frame, text="Password:").grid(row=1, column=0, sticky=tk.W, pady=5)
+        ttk.Label(input_frame, text="كلمة المرور:").grid(row=1, column=0, padx=10, pady=10, sticky="e")
         self.password_var = tk.StringVar()
-        password_entry = ttk.Entry(login_frame, textvariable=self.password_var, show="*", width=30)
-        password_entry.grid(row=1, column=1, sticky=tk.W, pady=5)
+        ttk.Entry(input_frame, textvariable=self.password_var, show="*", width=25).grid(row=1, column=1, padx=10, pady=10)
         
-        # Login button
-        login_button = ttk.Button(login_frame, text="Login", command=self.login, style="success.TButton")
-        login_button.grid(row=2, column=1, sticky=tk.E, pady=(20, 0))
+        # زر تسجيل الدخول
+        login_button = ttk.Button(main_frame, text="تسجيل الدخول", command=self.login)
+        login_button.pack(pady=15)
         
-        # Add event bindings
-        username_entry.bind("<Return>", lambda event: password_entry.focus())
-        password_entry.bind("<Return>", lambda event: self.login())
+        # تخصيص زر التسجيل
+        def on_enter(e):
+            login_button['style'] = 'Hover.TButton'
+        def on_leave(e):
+            login_button['style'] = 'TButton'
         
-        # Set focus on username field
-        username_entry.focus()
+        login_button.bind('<Enter>', on_enter)
+        login_button.bind('<Leave>', on_leave)
+        
+        # زر إعادة تعيين كلمات المرور
+        reset_button = ttk.Button(
+            main_frame, 
+            text="إعادة تعيين المستخدمين", 
+            command=self.reset_passwords,
+            style='Reset.TButton'
+        )
+        reset_button.pack(pady=5)
+        
+        # تسجيل حدث الضغط على Enter للقيام بتسجيل الدخول
+        self.root.bind('<Return>', lambda event: self.login())
+        
+        # حقوق النشر أو معلومات الإصدار
+        ttk.Label(self.root, text="© 2023 نظام المبيعات - الإصدار 1.0", 
+                 font=("Arial", 8)).place(relx=0.5, rely=0.95, anchor=tk.CENTER)
     
     def login(self):
-        # Get the entered credentials
         username = self.username_var.get()
         password = self.password_var.get()
         
-        # Validate credentials are not empty
-        if not username:
-            messagebox.showerror("Login Error", "Please enter your username.")
+        if not username or not password:
+            messagebox.showerror("خطأ", "الرجاء إدخال اسم المستخدم وكلمة المرور")
             return
         
-        if not password:
-            messagebox.showerror("Login Error", "Please enter your password.")
-            return
-        
-        # Attempt to verify the user
-        success, user_data = verify_user(username, password)
+        success, result = UserModel.authenticate(username, password)
         
         if success:
-            # Get database configuration
-            db_config = connect()
+            self.root.withdraw()  # إخفاء نافذة تسجيل الدخول
             
-            # Show success message
-            messagebox.showinfo("Login Successful", f"Welcome, {user_data['username']}!")
+            # إنشاء نافذة جديدة للوحة التحكم
+            dashboard_window = tk.Toplevel()
+            dashboard = Dashboard(dashboard_window, result, self.root)
             
-            # Open the dashboard
-            open_dashboard(self.root, db_config, user_data['username'])
+            # ضبط عنوان النافذة
+            dashboard_window.title(f"نظام المبيعات - محل البركة - {result['username']}")
+            
+            # إظهار النافذة في كامل الشاشة
+            dashboard_window.state('zoomed')
+            
+            # تعيين حدث الإغلاق
+            dashboard_window.protocol("WM_DELETE_WINDOW", lambda: self.on_dashboard_close(dashboard_window))
+            
+            # محاولة تحميل أيقونة للتطبيق
+            try:
+                dashboard_window.iconbitmap("assets/store_icon.ico")
+            except:
+                pass
         else:
-            messagebox.showerror("Login Error", "Invalid username or password.")
+            messagebox.showerror("خطأ في تسجيل الدخول", result)
+    
+    def reset_passwords(self):
+        if messagebox.askyesno("تأكيد", "هل أنت متأكد من إعادة تعيين المستخدمين الافتراضيين؟"):
+            success, message = UserModel.reset_default_users()
+            if success:
+                messagebox.showinfo("تم بنجاح", 
+                                  message + "\n\n"
+                                  "بيانات الدخول الافتراضية:\n"
+                                  "المدير: اسم المستخدم: admin، كلمة المرور: admin\n"
+                                  "الموظف: اسم المستخدم: user، كلمة المرور: user")
+            else:
+                messagebox.showerror("خطأ", message)
+    
+    def on_dashboard_close(self, dashboard_window):
+        dashboard_window.destroy()
+        self.root.destroy()
