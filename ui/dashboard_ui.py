@@ -35,8 +35,8 @@ class Dashboard:
         # محاولة تحميل أيقونة للتطبيق
         try:
             self.root.iconbitmap("assets/store_icon.ico")  # ضع ملف الأيقونة في مجلد assets
-        except:
-            pass
+        except (tk.TclError, FileNotFoundError):
+            pass  # الأيقونة اختيارية
         
         # إنشاء شريط القوائم
         self.menu_bar = tk.Menu(root)
@@ -111,26 +111,94 @@ class Dashboard:
         # تطبيق ستايل موحد لكل النوافذ
         self.apply_style()
     
+    
+    def center_window(self, window):
+        """توسيط النافذة في الشاشة"""
+        window.update_idletasks()
+        width = window.winfo_width()
+        height = window.winfo_height()
+        x = (window.winfo_screenwidth() // 2) - (width // 2)
+        y = (window.winfo_screenheight() // 2) - (height // 2)
+        window.geometry(f'{width}x{height}+{x}+{y}')
+
     def apply_style(self):
-        # تطبيق نمط وستايل على التطبيق
+        # تطبيق نمط وستايل عصري على التطبيق
         style = ttk.Style()
-        
-        # استخدام السمة clam لمظهر أكثر احترافية
         style.theme_use('clam')
         
-        # تخصيص ألوان الأزرار
-        style.configure('TButton', background='#4CAF50', foreground='black', font=('Arial', 10))
-        style.map('TButton', background=[('active', '#45a049')])
-        style.configure('Hover.TButton', background='#45a049')
+        # ألوان التطبيق
+        PRIMARY_COLOR = "#2196F3"    # أزرق
+        SECONDARY_COLOR = "#4CAF50"  # أخضر
+        DANGER_COLOR = "#f44336"     # أحمر
+        BG_COLOR = "#f5f5f5"         # رمادي فاتح للخلفية
+        TEXT_COLOR = "#333333"       # لون النص
         
+        # تخصيص الخطوط
+        default_font = ('Segoe UI', 10)
+        header_font = ('Segoe UI', 12, 'bold')
+        
+        self.root.option_add("*Font", default_font)
+        self.root.configure(bg=BG_COLOR)
+        
+        # تخصيص الأزرار
+        style.configure('TButton', 
+                       background=PRIMARY_COLOR, 
+                       foreground='white',
+                       font=('Segoe UI', 10, 'bold'),
+                       borderwidth=0,
+                       focuscolor='none',
+                       padding=(15, 8))
+                       
+        style.map('TButton', 
+                 background=[('active', '#1976D2'), ('pressed', '#0D47A1')],
+                 relief=[('pressed', 'flat')])
+        
+        style.configure('Hover.TButton', background='#1976D2')
+        
+        # تخصيص أزرار الخطر (حذف)
+        style.configure('Danger.TButton', background=DANGER_COLOR)
+        style.map('Danger.TButton', background=[('active', '#D32F2F')])
+        
+        # تخصيص أزرار النجاح (إضافة/حفظ)
+        style.configure('Success.TButton', background=SECONDARY_COLOR)
+        style.map('Success.TButton', background=[('active', '#388E3C')])
+
         # تخصيص علامات التبويب
-        style.configure('TNotebook.Tab', font=('Arial', 11), padding=[12, 5])
-        style.map('TNotebook.Tab', background=[('selected', '#e0e0e0')])
+        style.configure('TNotebook', background=BG_COLOR)
+        style.configure('TNotebook.Tab', 
+                       font=('Segoe UI', 11), 
+                       padding=[20, 10], 
+                       background='#e0e0e0',
+                       foreground='#555')
+                       
+        style.map('TNotebook.Tab', 
+                 background=[('selected', PRIMARY_COLOR)],
+                 foreground=[('selected', 'white')],
+                 expand=[('selected', [1, 1, 1, 0])])
         
-        # تخصيص الإطارات
-        style.configure('TFrame', background='#f9f9f9')
-        style.configure('TLabelframe', background='#f9f9f9')
-        style.configure('TLabelframe.Label', font=('Arial', 11, 'bold'))
+        # تخصيص الجداول (Treeview)
+        style.configure('Treeview', 
+                       font=('Segoe UI', 10),
+                       rowheight=30,
+                       background="white",
+                       fieldbackground="white")
+                       
+        style.configure('Treeview.Heading', 
+                       font=('Segoe UI', 11, 'bold'),
+                       background="#e0e0e0",
+                       foreground="#333",
+                       relief="flat")
+        
+        style.map('Treeview.Heading', background=[('active', '#d0d0d0')])
+        
+        # تخصيص الإطارات والعناوين
+        style.configure('TFrame', background=BG_COLOR)
+        style.configure('TLabelframe', background=BG_COLOR, borderwidth=2, relief='groove')
+        style.configure('TLabelframe.Label', font=('Segoe UI', 11, 'bold'), background=BG_COLOR, foreground=PRIMARY_COLOR)
+        style.configure('TLabel', background=BG_COLOR, font=('Segoe UI', 10))
+        
+        # تخصيص حقول الإدخال
+        style.configure('TEntry', padding=5)
 
     def update_datetime(self, label):
         # تحديث التاريخ والوقت كل ثانية
@@ -676,11 +744,15 @@ class Dashboard:
         
         # الحصول على قيمة الخصم
         try:
-            discount = float(self.discount_var.get())
+            discount_str = str(self.discount_var.get())
+            if discount_str.strip() == "" or discount_str.strip() == "0.0":
+                discount = 0.0
+            else:
+                discount = float(discount_str)
             if discount < 0:
                 discount = 0
                 self.discount_var.set(0)
-        except:
+        except (ValueError, TypeError, tk.TclError):
             discount = 0
             self.discount_var.set(0)
         
@@ -756,8 +828,28 @@ class Dashboard:
       للاتصال: 0100-123-4567
 """
             
-            # حفظ الفاتورة في ملف
-            filename = f"invoice_{invoice_id}.txt"
+            # حفظ الفاتورة في قاعدة البيانات
+            db_success, db_result = InvoiceModel.create_invoice(
+                user_id=self.user.get('id', 0),
+                customer_name=customer_name or "",
+                customer_phone=customer_phone or "",
+                barcode=barcode,
+                items=self.cart_items,
+                subtotal=subtotal,
+                discount=discount,
+                total=total
+            )
+            
+            if db_success:
+                # استخدام معرف الفاتورة من قاعدة البيانات
+                db_invoice_id = db_result
+            else:
+                # إذا فشل الحفظ في DB، نستمر مع الملف النصي فقط
+                print(f"تحذير: فشل حفظ الفاتورة في قاعدة البيانات: {db_result}")
+            
+            # حفظ الفاتورة في ملف نصي أيضاً
+            os.makedirs("invoices", exist_ok=True)
+            filename = f"invoices/invoice_{invoice_id}.txt"
             with open(filename, "w", encoding="utf-8") as f:
                 f.write(invoice_text)
             
@@ -889,7 +981,10 @@ class Dashboard:
             button_frame = ttk.Frame(invoice_window)
             button_frame.pack(fill="x", padx=10, pady=10)
             
-            # زر لحفظ الفاتورة
+            # الاحتفاظ بنسخة من عناصر السلة قبل تفريغها لاستخدامها في الطباعة
+            current_sales_items = list(self.cart_items)
+            
+            # زر لحفظ الفاتورة كنص
             def save_invoice():
                 save_path = filedialog.asksaveasfilename(
                     defaultextension=".txt",
@@ -904,16 +999,121 @@ class Dashboard:
                     except Exception as e:
                         messagebox.showerror("خطأ", f"فشل حفظ الفاتورة: {str(e)}")
             
-            # طباعة الفاتورة (محاكاة فقط)
+            # حفظ كـ PDF
+            def save_as_pdf():
+                try:
+                    from ui.components.invoice_pdf import InvoicePDF
+                    
+                    save_path = filedialog.asksaveasfilename(
+                        defaultextension=".pdf",
+                        initialfile=f"فاتورة_{invoice_id}.pdf",
+                        filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")]
+                    )
+                    if save_path:
+                        invoice_data = {
+                            'invoice_id': invoice_id,
+                            'date': invoice_date,
+                            'customer_name': customer_name,
+                            'customer_phone': customer_phone,
+                            'barcode': barcode,
+                            'items': current_sales_items,  # استخدام القائمة المحفوظة
+                            'subtotal': subtotal,
+                            'discount': discount,
+                            'total': total
+                        }
+                        success, msg = InvoicePDF.create_invoice_pdf(invoice_data, save_path)
+                        if success:
+                            messagebox.showinfo("تصدير PDF", f"تم حفظ الفاتورة بنجاح:\n{save_path}")
+                        else:
+                            messagebox.showerror("خطأ", msg)
+                except ImportError:
+                    messagebox.showerror("خطأ", "مكتبة reportlab غير متوفرة")
+                except Exception as e:
+                    messagebox.showerror("خطأ", f"فشل تصدير PDF: {str(e)}")
+            # طباعة الفاتورة
             def print_invoice():
-                messagebox.showinfo("طباعة الفاتورة", "تم إرسال الفاتورة للطباعة")
+                try:
+                    from ui.components.invoice_pdf import InvoicePDF
+                    import os
+                    
+                    # إنشاء ملف PDF مؤقت
+                    temp_pdf = f"temp_print_{invoice_id}.pdf"
+                    # تحويل المسار لمسار مطلق ضروري لأوامر ShellExecute
+                    temp_pdf = os.path.abspath(temp_pdf)
+                    
+                    invoice_data = {
+                        'invoice_id': invoice_id,
+                        'date': invoice_date,
+                        'customer_name': customer_name,
+                        'customer_phone': customer_phone,
+                        'barcode': barcode,
+                        'items': current_sales_items,
+                        'subtotal': subtotal,
+                        'discount': discount,
+                        'total': total
+                    }
+                    
+                    # توليد الـ PDF
+                    success, msg = InvoicePDF.create_invoice_pdf(invoice_data, temp_pdf)
+                    
+                    if not success:
+                        messagebox.showerror("خطأ", f"فشل توليد ملف الطباعة: {msg}")
+                        return
+
+                    # محاولة استخدام pywin32 لعرض قائمة الطابعات
+                    try:
+                        import win32print
+                        import win32api
+                        
+                        # الحصول على قائمة الطابعات
+                        printers = [p[2] for p in win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS)]
+                        default_printer = win32print.GetDefaultPrinter()
+                        
+                        # إنشاء نافذة اختيار الطابعة
+                        print_dialog = tk.Toplevel(invoice_window)
+                        print_dialog.title("طباعة الفاتورة")
+                        print_dialog.geometry("400x150")
+                        self.center_window(print_dialog)
+                        
+                        ttk.Label(print_dialog, text="اختر الطابعة:", font=('Arial', 12)).pack(pady=10)
+                        
+                        printer_var = tk.StringVar(value=default_printer)
+                        printer_combo = ttk.Combobox(print_dialog, textvariable=printer_var, values=printers, state="readonly", width=40)
+                        printer_combo.pack(pady=5)
+                        
+                        def do_print():
+                            selected_printer = printer_var.get()
+                            print_dialog.destroy()
+                            try:
+                                # استخدام الأمر printto لتحديد الطابعة
+                                # ملاحظة: يتطلب هذا الأمر وجود برنامج PDF مثبت يدعم فعل 'printto' مثل Adobe Reader أو غيره.
+                                # المتصفحات (Edge/Chrome) قد لا تدعم printto بشكل جيد من خلال ShellExecute.
+                                win32api.ShellExecute(0, "printto", temp_pdf, f'"{selected_printer}"', ".", 0)
+                                messagebox.showinfo("نجاح", f"تتم طباعة الفاتورة على: {selected_printer}")
+                            except Exception as e:
+                                # في حالة الفشل، نستخدم الفتح العادي
+                                messagebox.showwarning("تنبيه", f"تعذر الطباعة المباشرة: {e}\nسيتم فتح الملف للطباعة اليدوية.")
+                                os.startfile(temp_pdf)
+
+                        ttk.Button(print_dialog, text="طباعة", command=do_print).pack(pady=10)
+                        
+                        # زر لفتح الملف مباشرة (خيار بديل)
+                        ttk.Button(print_dialog, text="فتح PDF فقط", command=lambda: [print_dialog.destroy(), os.startfile(temp_pdf)]).pack(pady=5)
+
+                    except ImportError:
+                        # في حالة عدم وجود pywin32، نفتح الملف مباشرة
+                        os.startfile(temp_pdf)
+                        
+                except Exception as e:
+                    messagebox.showerror("خطأ غير متوقع", f"تفاصيل الخطأ: {str(e)}")
             
             # إلغاء الربط عند إغلاق النافذة
             def on_closing():
                 canvas.unbind_all("<MouseWheel>")
                 invoice_window.destroy()
             
-            self.create_button(button_frame, "حفظ الفاتورة", save_invoice).pack(side="left", padx=5)
+            self.create_button(button_frame, "حفظ TXT", save_invoice).pack(side="left", padx=5)
+            self.create_button(button_frame, "حفظ PDF", save_as_pdf).pack(side="left", padx=5)
             self.create_button(button_frame, "طباعة", print_invoice).pack(side="left", padx=5)
             self.create_button(button_frame, "إغلاق", on_closing).pack(side="right", padx=5)
             
@@ -941,7 +1141,8 @@ class Dashboard:
             return
         
         # فقط قم بحفظ الفاتورة في ملف نصي بدون محاولة عرضها في نافذة جديدة
-        filename = f"invoice_{invoice_id}_{int(time.time())}.txt"
+        os.makedirs("invoices", exist_ok=True)
+        filename = f"invoices/invoice_{invoice_id}_{int(time.time())}.txt"
         try:
             with open(filename, "w", encoding="utf-8") as f:
                 f.write("=" * 50 + "\n")
@@ -1005,8 +1206,11 @@ class Dashboard:
             import re
             from datetime import datetime
             
-            # البحث عن ملفات الفواتير في المجلد الحالي
-            invoice_files = [f for f in os.listdir('.') if f.startswith('invoice_') and f.endswith('.txt')]
+            # البحث عن ملفات الفواتير في مجلد invoices
+            invoices_dir = 'invoices'
+            if not os.path.exists(invoices_dir):
+                os.makedirs(invoices_dir)
+            invoice_files = [f for f in os.listdir(invoices_dir) if f.startswith('invoice_') and f.endswith('.txt')]
             
             # تنظيم البيانات حسب التاريخ
             daily_sales = {}
@@ -1014,7 +1218,8 @@ class Dashboard:
             
             for filename in invoice_files:
                 try:
-                    with open(filename, 'r', encoding='utf-8') as file:
+                    filepath = os.path.join(invoices_dir, filename)
+                    with open(filepath, 'r', encoding='utf-8') as file:
                         content = file.read()
                         
                         # استخراج تاريخ الفاتورة
@@ -1061,7 +1266,7 @@ class Dashboard:
                                 "id": invoice_id,
                                 "customer": customer_name,
                                 "total": invoice_total,
-                                "filename": filename
+                                "filename": filepath
                             })
                             daily_sales[invoice_date]["total"] += invoice_total
                         else:
@@ -1071,7 +1276,7 @@ class Dashboard:
                                     "id": invoice_id,
                                     "customer": customer_name,
                                     "total": invoice_total,
-                                    "filename": filename
+                                    "filename": filepath
                                 }],
                                 "total": invoice_total
                             }
@@ -1216,21 +1421,22 @@ class Dashboard:
                         discount = 0.0
                         
                         # استخراج معلومات الفاتورة
-                        name_match = re.search(r'الاسم: (.*?)(?:\n|$)', content)
+                        # تحسين Regex ليتوقف عند وجود حقول أخرى في نفس السطر
+                        name_match = re.search(r'الاسم:\s*(?:\|\s*)?(.*?)(?:\s+(?:رقم الهاتف:|التاريخ:|الباركود:|$))', content)
                         if name_match:
-                            customer_name = name_match.group(1).strip()
+                            customer_name = name_match.group(1).strip().strip('|').strip()
                             
-                        phone_match = re.search(r'رقم الهاتف: (.*?)(?:\n|$)', content)
+                        phone_match = re.search(r'رقم الهاتف:\s*(?:\|\s*)?(.*?)(?:\s+(?:رقم الفاتورة:|التاريخ:|الباركود:|$))', content)
                         if phone_match:
-                            customer_phone = phone_match.group(1).strip()
+                            customer_phone = phone_match.group(1).strip().strip('|').strip()
                             
-                        date_match = re.search(r'التاريخ: (\d{4}-\d{2}-\d{2})', content)
+                        date_match = re.search(r'التاريخ:\s*(\d{4}-\d{2}-\d{2})', content)
                         if date_match:
                             invoice_date = date_match.group(1)
                             
-                        barcode_match = re.search(r'الباركود: (#[A-Z0-9]+)', content)
+                        barcode_match = re.search(r'الباركود:\s*([#A-Z0-9]+)', content)
                         if barcode_match:
-                            barcode = barcode_match.group(1)
+                            barcode = barcode_match.group(1).strip()
                             
                         total_match = re.search(r'الإجمالي بعد الخصم:\s+(\d+\.\d+)', content)
                         if total_match:
@@ -1246,146 +1452,166 @@ class Dashboard:
                         
                         # استخراج المنتجات
                         items = []
-                        # نمط استخراج المنتجات من النص
-                        items_pattern = r'\| (.*?) \| (\d+) \| (\d+\.\d+) \| (\d+\.\d+) \|'
-                        items_matches = re.findall(items_pattern, content)
+                        lines = content.split('\n')
+                        capture_items = False
                         
-                        for match in items_matches:
-                            product_name = match[0].strip()
-                            quantity = int(match[1])
-                            price = float(match[2])
-                            item_total = float(match[3])
-                            items.append({
-                                'name': product_name,
-                                'quantity': quantity,
-                                'price': price,
-                                'total': item_total
-                            })
-                        
-                        # عرض محتوى الفاتورة في نافذة جديدة بنفس التنسيق الجميل
+                        for line in lines:
+                            line = line.strip()
+                            if "الصنف" in line and "الكمية" in line:
+                                capture_items = True
+                                continue
+                            if "الإجمالي" in line or "الإجمالي قبل الخصم" in line or "الخصم" in line or "+" in line:
+                                if capture_items:
+                                    # إشارة لنهاية الجدول
+                                    if "الإجمالي" in line:
+                                         capture_items = False
+                                continue
+                                
+                            if capture_items and line and not line.startswith('+'):
+                                clean_line = line.strip('|').strip()
+                                parts = [p.strip() for p in clean_line.split('|')]
+                                
+                                if len(parts) >= 4:
+                                    try:
+                                        name = parts[0]
+                                        qty = int(parts[1])
+                                        price = float(parts[2])
+                                        total_item = float(parts[3])
+                                        items.append({'name': name, 'quantity': qty, 'price': price, 'total': total_item})
+                                    except ValueError:
+                                        pass
+                                else:
+                                    # Regex fallback للمسافات
+                                    # النمط: الاسم (نص) مسافة كمية (رقم) مسافة سعر (رقم) مسافة إجمالي (رقم)
+                                    space_match = re.search(r'^(.*)\s+(\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)$', clean_line)
+                                    if space_match:
+                                        try:
+                                            items.append({
+                                                'name': space_match.group(1).strip(),
+                                                'quantity': int(space_match.group(2)),
+                                                'price': float(space_match.group(3)),
+                                                'total': float(space_match.group(4))
+                                            })
+                                        except:
+                                            pass
+
+                        # عرض محتوى الفاتورة بمعاينة جميلة (تشبه الإيصال الورقي)
                         invoice_window = tk.Toplevel(report_window)
-                        invoice_window.title(f"فاتورة رقم {invoice_id}")
+                        invoice_window.title(f"معاينة الفاتورة #{invoice_id}")
                         
-                        # حجم مناسب للنافذة
-                        window_width = int(report_window.winfo_width() * 0.8)
-                        window_height = int(report_window.winfo_height() * 0.9)
+                        window_width = 450 # عرض مناسب للإيصال
+                        window_height = 650
                         
-                        # توسيط النافذة
                         screen_width = self.root.winfo_screenwidth()
                         screen_height = self.root.winfo_screenheight()
                         center_x = int(screen_width/2 - window_width/2)
                         center_y = int(screen_height/2 - window_height/2)
-                        
                         invoice_window.geometry(f"{window_width}x{window_height}+{center_x}+{center_y}")
-                        invoice_window.minsize(500, 650)
                         
-                        # تخصيص مظهر النافذة
-                        invoice_window.configure(bg="#f5f5f5")
+                        invoice_window.configure(bg="#525659") # خلفية داكنة مثل برنامج PDF
                         
-                        # إنشاء إطار للنص مع شريط تمرير
-                        main_frame = ttk.Frame(invoice_window)
-                        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+                        # حاوية الورقة (بيضاء)
+                        main_frame = tk.Canvas(invoice_window, bg="white", highlightthickness=0)
+                        scrollbar = ttk.Scrollbar(invoice_window, orient="vertical", command=main_frame.yview)
+                        main_frame.configure(yscrollcommand=scrollbar.set)
                         
-                        # استخدام Canvas لتوفير تجربة مستخدم أفضل وأكثر استجابة
-                        canvas = tk.Canvas(main_frame, highlightthickness=0)
-                        scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
-                        
-                        # ربط الـ Canvas بشريط التمرير
-                        canvas.configure(yscrollcommand=scrollbar.set)
-                        
-                        # وضع عناصر التخطيط
                         scrollbar.pack(side="right", fill="y")
-                        canvas.pack(side="left", fill="both", expand=True)
+                        main_frame.pack(side="left", fill="both", expand=True, padx=20, pady=20)
                         
-                        # إطار داخل الـ Canvas للمحتوى
-                        content_frame = ttk.Frame(canvas)
-                        canvas.create_window((0, 0), window=content_frame, anchor="nw")
+                        # إطار المحتوى داخل الورقة
+                        paper_content = tk.Frame(main_frame, bg="white")
+                        main_frame.create_window((0, 0), window=paper_content, anchor="nw", width=window_width-40) # -40 padding
                         
                         # الشعار والترويسة
-                        header_frame = ttk.Frame(content_frame)
+                        header_frame = ttk.Frame(paper_content) # استخدام paper_content بدلاً من content_frame
                         header_frame.pack(fill="x", padx=10, pady=5)
                         
-                        ttk.Label(header_frame, text="محل البركة", font=("Arial", 18, "bold")).pack(pady=5)
-                        ttk.Label(header_frame, text="العنوان: شارع النصر – القاهرة", font=("Arial", 10)).pack()
-                        ttk.Label(header_frame, text="الهاتف: 0100-123-4567", font=("Arial", 10)).pack(pady=2)
+                        ttk.Label(header_frame, text="محل البركة", font=("Arial", 18, "bold"), background="white").pack(pady=5)
+                        ttk.Label(header_frame, text="العنوان: شارع النصر – القاهرة", font=("Arial", 10), background="white").pack()
+                        ttk.Label(header_frame, text="الهاتف: 0100-123-4567", font=("Arial", 10), background="white").pack(pady=2)
                         
-                        ttk.Separator(content_frame).pack(fill="x", padx=10, pady=5)
+                        ttk.Separator(paper_content).pack(fill="x", padx=10, pady=5)
                         
                         # معلومات الفاتورة
-                        info_frame = ttk.Frame(content_frame)
+                        info_frame = ttk.Frame(paper_content)
                         info_frame.pack(fill="x", padx=10, pady=5)
                         
+                        # ستايل المعلومات (خلفية بيضاء)
+                        style = ttk.Style()
+                        style.configure("White.TLabel", background="white", font=("Arial", 10))
+                        style.configure("WhiteBold.TLabel", background="white", font=("Arial", 10, "bold"))
+                        
                         # استخدام شبكة للمعلومات
-                        ttk.Label(info_frame, text="الاسم:", font=("Arial", 10, "bold")).grid(row=0, column=0, sticky="e", padx=5, pady=2)
-                        ttk.Label(info_frame, text=customer_name).grid(row=0, column=1, sticky="w", padx=5, pady=2)
+                        ttk.Label(info_frame, text="الاسم:", style="WhiteBold.TLabel").grid(row=0, column=0, sticky="e", padx=5, pady=2)
+                        ttk.Label(info_frame, text=customer_name, style="White.TLabel").grid(row=0, column=1, sticky="w", padx=5, pady=2)
                         
-                        ttk.Label(info_frame, text="رقم الهاتف:", font=("Arial", 10, "bold")).grid(row=1, column=0, sticky="e", padx=5, pady=2)
-                        ttk.Label(info_frame, text=customer_phone).grid(row=1, column=1, sticky="w", padx=5, pady=2)
+                        ttk.Label(info_frame, text="رقم الهاتف:", style="WhiteBold.TLabel").grid(row=1, column=0, sticky="e", padx=5, pady=2)
+                        ttk.Label(info_frame, text=customer_phone, style="White.TLabel").grid(row=1, column=1, sticky="w", padx=5, pady=2)
                         
-                        ttk.Label(info_frame, text="رقم الفاتورة:", font=("Arial", 10, "bold")).grid(row=0, column=2, sticky="e", padx=5, pady=2)
-                        ttk.Label(info_frame, text=str(invoice_id)).grid(row=0, column=3, sticky="w", padx=5, pady=2)
+                        ttk.Label(info_frame, text="رقم الفاتورة:", style="WhiteBold.TLabel").grid(row=0, column=2, sticky="e", padx=5, pady=2)
+                        ttk.Label(info_frame, text=str(invoice_id), style="White.TLabel").grid(row=0, column=3, sticky="w", padx=5, pady=2)
                         
-                        ttk.Label(info_frame, text="التاريخ:", font=("Arial", 10, "bold")).grid(row=1, column=2, sticky="e", padx=5, pady=2)
-                        ttk.Label(info_frame, text=invoice_date).grid(row=1, column=3, sticky="w", padx=5, pady=2)
+                        ttk.Label(info_frame, text="التاريخ:", style="WhiteBold.TLabel").grid(row=1, column=2, sticky="e", padx=5, pady=2)
+                        ttk.Label(info_frame, text=invoice_date, style="White.TLabel").grid(row=1, column=3, sticky="w", padx=5, pady=2)
                         
                         if barcode:
-                            ttk.Label(info_frame, text="الباركود:", font=("Arial", 10, "bold")).grid(row=2, column=0, sticky="e", padx=5, pady=2)
-                            ttk.Label(info_frame, text=barcode).grid(row=2, column=1, sticky="w", padx=5, pady=2)
+                            ttk.Label(info_frame, text="الباركود:", style="WhiteBold.TLabel").grid(row=2, column=0, sticky="e", padx=5, pady=2)
+                            ttk.Label(info_frame, text=barcode, style="White.TLabel").grid(row=2, column=1, sticky="w", padx=5, pady=2)
                         
-                        ttk.Separator(content_frame).pack(fill="x", padx=10, pady=5)
+                        ttk.Separator(paper_content).pack(fill="x", padx=10, pady=5)
                         
                         # جدول المنتجات
-                        items_frame = ttk.Frame(content_frame)
+                        items_frame = ttk.Frame(paper_content)
                         items_frame.pack(fill="x", padx=10, pady=5)
                         
                         # عناوين الجدول
-                        ttk.Label(items_frame, text="الصنف", font=("Arial", 10, "bold")).grid(row=0, column=0, padx=5, pady=2, sticky="w")
-                        ttk.Label(items_frame, text="الكمية", font=("Arial", 10, "bold")).grid(row=0, column=1, padx=5, pady=2)
-                        ttk.Label(items_frame, text="السعر", font=("Arial", 10, "bold")).grid(row=0, column=2, padx=5, pady=2)
-                        ttk.Label(items_frame, text="الإجمالي", font=("Arial", 10, "bold")).grid(row=0, column=3, padx=5, pady=2)
+                        ttk.Label(items_frame, text="الصنف", style="WhiteBold.TLabel").grid(row=0, column=0, padx=5, pady=2, sticky="w")
+                        ttk.Label(items_frame, text="الكمية", style="WhiteBold.TLabel").grid(row=0, column=1, padx=5, pady=2)
+                        ttk.Label(items_frame, text="السعر", style="WhiteBold.TLabel").grid(row=0, column=2, padx=5, pady=2)
+                        ttk.Label(items_frame, text="الإجمالي", style="WhiteBold.TLabel").grid(row=0, column=3, padx=5, pady=2)
                         
                         ttk.Separator(items_frame, orient="horizontal").grid(row=1, columnspan=4, sticky="ew", padx=5, pady=2)
                         
                         # إضافة المنتجات للجدول
                         for i, item in enumerate(items):
-                            ttk.Label(items_frame, text=item['name']).grid(row=i+2, column=0, padx=5, pady=2, sticky="w")
-                            ttk.Label(items_frame, text=str(item['quantity'])).grid(row=i+2, column=1, padx=5, pady=2)
-                            ttk.Label(items_frame, text=f"{item['price']:.2f}").grid(row=i+2, column=2, padx=5, pady=2)
-                            ttk.Label(items_frame, text=f"{item['total']:.2f}").grid(row=i+2, column=3, padx=5, pady=2)
+                            ttk.Label(items_frame, text=item['name'], style="White.TLabel").grid(row=i+2, column=0, padx=5, pady=2, sticky="w")
+                            ttk.Label(items_frame, text=str(item['quantity']), style="White.TLabel").grid(row=i+2, column=1, padx=5, pady=2)
+                            ttk.Label(items_frame, text=f"{item['price']:.2f}", style="White.TLabel").grid(row=i+2, column=2, padx=5, pady=2)
+                            ttk.Label(items_frame, text=f"{item['total']:.2f}", style="White.TLabel").grid(row=i+2, column=3, padx=5, pady=2)
                         
-                        ttk.Separator(content_frame).pack(fill="x", padx=10, pady=5)
+                        ttk.Separator(paper_content).pack(fill="x", padx=10, pady=5)
                         
                         # إجماليات
-                        totals_frame = ttk.Frame(content_frame)
+                        totals_frame = ttk.Frame(paper_content)
                         totals_frame.pack(fill="x", padx=10, pady=5)
                         
-                        ttk.Label(totals_frame, text="الإجمالي قبل الخصم:", font=("Arial", 10, "bold")).grid(row=0, column=0, padx=5, pady=2, sticky="e")
-                        ttk.Label(totals_frame, text=f"{subtotal:.2f}").grid(row=0, column=1, padx=5, pady=2, sticky="w")
+                        ttk.Label(totals_frame, text="الإجمالي قبل الخصم:", style="WhiteBold.TLabel").grid(row=0, column=0, padx=5, pady=2, sticky="e")
+                        ttk.Label(totals_frame, text=f"{subtotal:.2f}", style="White.TLabel").grid(row=0, column=1, padx=5, pady=2, sticky="w")
                         
-                        ttk.Label(totals_frame, text="الخصم:", font=("Arial", 10, "bold")).grid(row=1, column=0, padx=5, pady=2, sticky="e")
-                        ttk.Label(totals_frame, text=f"{discount:.2f}").grid(row=1, column=1, padx=5, pady=2, sticky="w")
+                        ttk.Label(totals_frame, text="الخصم:", style="WhiteBold.TLabel").grid(row=1, column=0, padx=5, pady=2, sticky="e")
+                        ttk.Label(totals_frame, text=f"{discount:.2f}", style="White.TLabel").grid(row=1, column=1, padx=5, pady=2, sticky="w")
                         
-                        ttk.Label(totals_frame, text="الإجمالي بعد الخصم:", font=("Arial", 10, "bold")).grid(row=2, column=0, padx=5, pady=2, sticky="e")
-                        ttk.Label(totals_frame, text=f"{total:.2f}", font=("Arial", 12, "bold")).grid(row=2, column=1, padx=5, pady=2, sticky="w")
+                        ttk.Label(totals_frame, text="الإجمالي بعد الخصم:", style="WhiteBold.TLabel").grid(row=2, column=0, padx=5, pady=2, sticky="e")
+                        ttk.Label(totals_frame, text=f"{total:.2f}", style="WhiteBold.TLabel", font=("Arial", 12, "bold")).grid(row=2, column=1, padx=5, pady=2, sticky="w")
                         
-                        ttk.Separator(content_frame).pack(fill="x", padx=10, pady=5)
+                        ttk.Separator(paper_content).pack(fill="x", padx=10, pady=5)
                         
                         # تذييل
-                        footer_frame = ttk.Frame(content_frame)
+                        footer_frame = ttk.Frame(paper_content)
                         footer_frame.pack(fill="x", padx=10, pady=5)
                         
-                        ttk.Label(footer_frame, text="شكراً لتعاملكم معنا!", font=("Arial", 12, "bold")).pack(pady=2)
-                        ttk.Label(footer_frame, text="للاتصال: 0100-123-4567").pack()
+                        ttk.Label(footer_frame, text="شكراً لتعاملكم معنا!", style="WhiteBold.TLabel", font=("Arial", 12, "bold")).pack(pady=2)
+                        ttk.Label(footer_frame, text="للاتصال: 0100-123-4567", style="White.TLabel").pack()
                         
                         # تحديث حجم المنطقة القابلة للتمرير
-                        content_frame.update_idletasks()
-                        canvas.config(scrollregion=canvas.bbox("all"))
+                        paper_content.update_idletasks()
+                        main_frame.config(scrollregion=main_frame.bbox("all"))
                         
                         # تفعيل التمرير باستخدام عجلة الماوس
                         def _on_mousewheel(event):
-                            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+                            main_frame.yview_scroll(int(-1*(event.delta/120)), "units")
                         
-                        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+                        main_frame.bind_all("<MouseWheel>", _on_mousewheel)
                         
                         # إطار الأزرار
                         button_frame = ttk.Frame(invoice_window)
@@ -1406,17 +1632,75 @@ class Dashboard:
                                 except Exception as e:
                                     messagebox.showerror("خطأ", f"فشل حفظ الفاتورة: {str(e)}")
                         
-                        # طباعة الفاتورة (محاكاة فقط)
-                        def print_invoice():
-                            messagebox.showinfo("طباعة الفاتورة", "تم إرسال الفاتورة للطباعة")
+
+                        # طباعة الفاتورة أو حفظها كـ PDF
+                        def print_report_invoice():
+                            try:
+                                from ui.components.invoice_pdf import InvoicePDF
+                                import os
+                                import json
+                                
+                                # محاولة استخراج بيانات الفاتورة من قاعدة البيانات
+                                # نحتاج لإعادة تجميع البيانات لأننا لدينا النص فقط
+                                # ملاحظة: الحل الأفضل هو استرجاع البيانات المهيكلة من قاعدة البيانات
+                                # في الوقت الحالي سنحاول استخراج المعلومات الأساسية
+                                
+                                # إنشاء ملف PDF مؤقت
+                                temp_pdf = f"temp_report_{invoice_id}.pdf"
+                                temp_pdf = os.path.abspath(temp_pdf)
+                                
+                                # استخدام البيانات المتاحة مباشرة من النص
+                                formatted_data = {
+                                    'invoice_id': invoice_id,
+                                    'date': invoice_date,
+                                    'customer_name': customer_name,
+                                    'customer_phone': customer_phone,
+                                    'barcode': str(invoice_id),
+                                    'items': items,
+                                    'subtotal': subtotal,
+                                    'discount': discount,
+                                    'total': total
+                                }
+                                
+                                # توليد الـ PDF
+                                success_pdf, msg = InvoicePDF.create_invoice_pdf(formatted_data, temp_pdf)
+                                
+                                if success_pdf:
+                                    # فتح الملف للطباعة
+                                    os.startfile(temp_pdf)
+                                else:
+                                    messagebox.showerror("خطأ", f"فشل توليد PDF: {msg}")
+                                    
+                            except Exception as e:
+                                messagebox.showerror("خطأ", f"فشل الطباعة: {str(e)}")
+                        
+
+                        # إطار الأزرار
+                        button_frame = ttk.Frame(invoice_window)
+                        # وضعه في الأسفل باستخدام pack after main_frame (لكن main_frame pack side=left)
+                        # لذا سنضعه في الأسفل fill=x
+                        # ولكن مهلاً، main_frame واخد side=left ومساحة expand.
+                        # الأفضل وضع button_frame في الأسفل (side=bottom) قبل عمل pack للـ main_frame والـ scrollbar
+                        # لكن الترتيب هنا قد يسبب مشاكل إذا لم نعد ترتيب الـ pack
+                        
+                        # الحل: نستخدم grid أو pack بترتيب صحيح.
+                        # سنقوم بتدمير الـ pack القديم للـ scrollbar و main_frame ونعيد ترتيبهم
+                        scrollbar.pack_forget()
+                        main_frame.pack_forget()
+                        
+                        button_frame.pack(side="bottom", fill="x", padx=10, pady=10)
+                        
+                        # إعادة وضع عناصر التخطيط الرئيسية
+                        scrollbar.pack(side="right", fill="y")
+                        main_frame.pack(side="left", fill="both", expand=True, padx=20, pady=20)
                         
                         # إلغاء الربط عند إغلاق النافذة
                         def on_closing():
-                            canvas.unbind_all("<MouseWheel>")
+                            main_frame.unbind_all("<MouseWheel>")
                             invoice_window.destroy()
-                        
-                        self.create_button(button_frame, "حفظ الفاتورة", save_invoice).pack(side="left", padx=5)
-                        self.create_button(button_frame, "طباعة", print_invoice).pack(side="left", padx=5)
+
+                        self.create_button(button_frame, "حفظ النص", save_invoice).pack(side="left", padx=5)
+                        self.create_button(button_frame, "طباعة / PDF", print_report_invoice).pack(side="left", padx=5)
                         self.create_button(button_frame, "إغلاق", on_closing).pack(side="right", padx=5)
                         
                         invoice_window.protocol("WM_DELETE_WINDOW", on_closing)

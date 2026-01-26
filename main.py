@@ -16,8 +16,8 @@ def main():
     # ضبط نوع الخط للدعم العربي
     try:
         root.option_add("*Font", "Arial 10")
-    except:
-        pass
+    except tk.TclError:
+        pass  # إذا فشل تعيين الخط، نستخدم الافتراضي
     
     # بدء تطبيق تسجيل الدخول
     app = Login(root)

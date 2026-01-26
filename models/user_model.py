@@ -174,6 +174,21 @@ class UserModel:
             return False, f"خطأ في استرجاع المستخدم: {str(e)}"
     
     @classmethod
+    def validate_password(cls, password):
+        """
+        التحقق من قوة كلمة المرور
+        
+        Args:
+            password (str): كلمة المرور
+            
+        Returns:
+            tuple: (valid, message)
+        """
+        if len(password) < 6:
+            return False, "كلمة المرور يجب أن تكون 6 أحرف على الأقل"
+        return True, "كلمة المرور صالحة"
+    
+    @classmethod
     def add_user(cls, username, password, role):
         """
         إضافة مستخدم جديد
@@ -195,19 +210,27 @@ class UserModel:
             # التحقق من صحة البيانات
             if not username or not password:
                 return False, "اسم المستخدم وكلمة المرور مطلوبان"
+            
+            # التحقق من قوة كلمة المرور
+            valid, msg = cls.validate_password(password)
+            if not valid:
+                return False, msg
                 
             if role not in ["admin", "worker"]:
                 return False, "دور المستخدم يجب أن يكون 'admin' أو 'worker'"
+            
+            # تشفير كلمة المرور
+            hashed_password = hashlib.sha256(password.encode()).hexdigest()
             
             # الاتصال بقاعدة البيانات
             conn = sqlite3.connect(cls.db_path)
             cursor = conn.cursor()
             
-            # إضافة المستخدم
+            # إضافة المستخدم بكلمة مرور مشفرة
             try:
                 cursor.execute(
                     "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-                    (username, password, role)  # نستخدم كلمة المرور كما هي (بدون تشفير) للسهولة في البداية
+                    (username, hashed_password, role)
                 )
                 conn.commit()
                 conn.close()
@@ -260,10 +283,17 @@ class UserModel:
             # تحديث بيانات المستخدم
             try:
                 if password:
-                    # استخدام كلمة المرور كما هي بدون تشفير
+                    # التحقق من قوة كلمة المرور الجديدة
+                    valid, msg = cls.validate_password(password)
+                    if not valid:
+                        conn.close()
+                        return False, msg
+                    
+                    # تشفير كلمة المرور الجديدة
+                    hashed_password = hashlib.sha256(password.encode()).hexdigest()
                     cursor.execute(
                         "UPDATE users SET username = ?, password = ?, role = ? WHERE id = ?",
-                        (username, password, role, user_id)
+                        (username, hashed_password, role, user_id)
                     )
                 else:
                     # الحفاظ على كلمة المرور القديمة
