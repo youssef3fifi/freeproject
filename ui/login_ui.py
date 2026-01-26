@@ -34,8 +34,8 @@ class Login:
         # محاولة تحميل أيقونة للتطبيق
         try:
             self.root.iconbitmap("assets/store_icon.ico")
-        except:
-            pass
+        except (tk.TclError, FileNotFoundError):
+            pass  # الأيقونة اختيارية
             
         # تطبيق النمط
         self.apply_style()
@@ -145,8 +145,8 @@ class Login:
             # محاولة تحميل أيقونة للتطبيق
             try:
                 dashboard_window.iconbitmap("assets/store_icon.ico")
-            except:
-                pass
+            except (tk.TclError, FileNotFoundError):
+                pass  # الأيقونة اختيارية
         else:
             messagebox.showerror("خطأ في تسجيل الدخول", result)
     
